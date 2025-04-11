@@ -1,0 +1,87 @@
+.react-flow {
+  cursor: default !important;
+}
+
+.react-flow__node {
+  cursor: pointer !important;
+}
+
+.react-flow__pane {
+  cursor: default !important;
+}
+
+/* 드래그 중일 때 */
+body.react-flow-grabbing .react-flow__pane {
+  cursor: grabbing !important;
+}
+
+/* 연결선 스타일 */
+.react-flow__edge-path {
+  stroke-width: 2px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #3b82f6 !important;
+  stroke-width: 3px !important;
+}
+
+/* 연결점 스타일 */
+.react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  background-color: #555 !important;
+  border: 2px solid white !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-flow__handle:hover {
+  background-color: #3b82f6 !important;
+  transform: scale(1.2) !important;
+}
+
+/* 노드 스타일 */
+.react-flow__node {
+  padding: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1) !important;
+  background: white !important;
+  border: 2px solid transparent !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-flow__node.selected {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5) !important;
+}
+
+/* 연결점 연결 시 스타일 */
+.react-flow__handle-connecting {
+  background-color: #ff6b6b !important;
+}
+
+.react-flow__handle-valid {
+  background-color: #51cf66 !important;
+}
+
+/* 노드 내부 컨텐츠 스타일 */
+.react-flow__node-default {
+  font-size: 12px !important;
+  background: white !important;
+  border: 1px solid #ddd !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+/* 연결선 인터랙션 */
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #3b82f6 !important;
+  stroke-width: 3px !important;
+}
+
+/* 드래그 영역 스타일 */
+.react-flow__selection {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 1px solid #3b82f6 !important;
+} 

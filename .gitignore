@@ -29,16 +29,4 @@ logs/
 .vscode/
 
 # OS
-Thumbs.db
-
-# Project specific
-docs/
-src/
-CONTRIBUTING.md
-LICENSE
-TUTORIAL.md
-ABOUT_LOVETREE.md
-jest.config.js
-tailwind.config.js
-package-lock.json
-package.json 
+Thumbs.db 

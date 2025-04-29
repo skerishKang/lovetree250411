@@ -27,8 +27,8 @@ interface CommentData {
 }
 
 export const useTree = () => {
-  const dispatch = useDispatch();
-  const { nodes, loading, error } = useSelector((state: RootState) => state.tree);
+  const dispatch = useDispatch<any>();
+  const { nodes, loading, error } = useSelector((state: RootState) => state.trees);
   const [treeError, setTreeError] = useState<string | null>(null);
 
   const getNodes = useCallback(
@@ -107,8 +107,12 @@ export const useTree = () => {
     async (nodeId: string, data: CommentData) => {
       try {
         setTreeError(null);
-        await dispatch(addComment({ nodeId, content: data.content })).unwrap();
-        return true;
+        const result = await dispatch(addComment({ nodeId, content: data.content }));
+        if (result.payload) {
+          return true;
+        } else {
+          throw new Error('댓글 작성에 실패했습니다.');
+        }
       } catch (error) {
         setTreeError('댓글 작성에 실패했습니다.');
         return false;

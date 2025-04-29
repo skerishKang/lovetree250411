@@ -1,6 +1,8 @@
 const User = require('../models/User');
 const { createNotification } = require('./notificationController');
 const logger = require('../utils/logger');
+const Follow = require('../models/Follow');
+const mongoose = require('mongoose');
 
 // 팔로우
 exports.followUser = async (req, res) => {
@@ -258,5 +260,57 @@ exports.getFollowing = async (req, res) => {
       message: '팔로잉 목록을 불러오는데 실패했습니다.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined 
     });
+  }
+};
+
+// 팔로우 추가
+exports.addFollow = async (req, res) => {
+  try {
+    const { targetType, targetId } = req.body;
+    const user = req.user._id;
+    const follow = await Follow.create({ user, targetType, targetId });
+    res.status(201).json(follow);
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ message: '이미 팔로우 중입니다.' });
+    }
+    res.status(500).json({ message: '팔로우 추가 실패', error: err.message });
+  }
+};
+
+// 팔로우 취소
+exports.removeFollow = async (req, res) => {
+  try {
+    const { targetType, targetId } = req.body;
+    const user = req.user._id;
+    const follow = await Follow.findOneAndDelete({ user, targetType, targetId });
+    if (!follow) {
+      return res.status(404).json({ message: '팔로우 기록이 없습니다.' });
+    }
+    res.json({ message: '팔로우 취소 성공' });
+  } catch (err) {
+    res.status(500).json({ message: '팔로우 취소 실패', error: err.message });
+  }
+};
+
+// 특정 대상의 팔로우 수 조회
+exports.getFollowCount = async (req, res) => {
+  try {
+    const { targetType, targetId } = req.query;
+    const count = await Follow.countDocuments({ targetType, targetId });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ message: '팔로우 수 조회 실패', error: err.message });
+  }
+};
+
+// 특정 대상의 팔로워 목록 조회
+exports.getFollowers = async (req, res) => {
+  try {
+    const { targetType, targetId } = req.query;
+    const followers = await Follow.find({ targetType, targetId }).populate('user', 'name profileImage');
+    res.json(followers);
+  } catch (err) {
+    res.status(500).json({ message: '팔로워 목록 조회 실패', error: err.message });
   }
 }; 

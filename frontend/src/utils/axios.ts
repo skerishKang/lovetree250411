@@ -1,12 +1,15 @@
-import axios from 'axios';
-import { getToken, removeToken, getRefreshToken, setToken, clearAuthData } from './auth';
+import axios, {
+  InternalAxiosRequestConfig,
+  AxiosResponse,
+  AxiosError,
+} from 'axios';
+import { getToken, clearAuthData } from './auth';
+import { getApiUrl } from './apiConfig';
 
-// 개발 환경에서만 로그 출력
+// vite-env.d.ts 파일이 있어야 인식됨
 const isDevelopment = import.meta.env.MODE === 'development';
 
-// 로그아웃 핸들러를 외부에서 주입받기 위한 변수
 let logoutHandler: (() => void) | null = null;
-
 export const setLogoutHandler = (handler: () => void) => {
   logoutHandler = handler;
   if (isDevelopment) {
@@ -14,108 +17,133 @@ export const setLogoutHandler = (handler: () => void) => {
   }
 };
 
-// 공개 API 경로 목록
-const publicApiPaths = [
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/auth/health'
-];
+const publicApiPaths = ['/auth/login', '/auth/register', '/auth/health'];
 
-// axios 인스턴스 생성
-const api = axios.create({
-  baseURL: import.meta.env.MODE === 'development' ? 'http://localhost:3001' : '/api',
+interface ErrorResponse {
+  message: string;
+  status?: number;
+  code?: string;
+}
+
+// YouTube API를 위한 별도의 axios 인스턴스 생성
+export const youtubeApi = axios.create({
+  baseURL: 'https://www.googleapis.com/youtube/v3',
   timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
-// 요청 인터셉터
-api.interceptors.request.use(
-  (config) => {
-    const token = getToken();
-    const isPublicApi = publicApiPaths.some(path => config.url?.startsWith(path));
-    
-    if (token && !isPublicApi) {
-      config.headers.Authorization = `Bearer ${token}`;
+// 설정 확인을 위한 임시 axios 인스턴스
+export const configApi = axios.create({
+  timeout: 5000,
+});
+
+// 동적 baseURL을 사용하는 API 인스턴스 생성 함수
+export const createApi = () => {
+  // API 기본 URL 가져오기 (apiConfig에서 가져옴)
+  const baseURL = getApiUrl();
+  if (isDevelopment) {
+    console.log('🌐 API 기본 URL:', baseURL);
+  }
+
+  const apiInstance = axios.create({
+    baseURL,
+    timeout: 10000,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    // CORS 설정 추가
+    withCredentials: true,
+  });
+
+  // 요청 인터셉터
+  apiInstance.interceptors.request.use(
+    (config: InternalAxiosRequestConfig) => {
+      const token = getToken();
+      const isPublicApi = publicApiPaths.some(path => config.url?.includes(path));
+
+      if (token && !isPublicApi) {
+        config.headers.Authorization = `Bearer ${token}`;
+        if (isDevelopment) {
+          console.log('🔑 토큰이 요청에 포함됨:', token.substring(0, 20) + '...');
+        }
+      } else if (!isPublicApi && isDevelopment) {
+        console.warn('⚠️ 인증이 필요한 요청에 토큰이 없음:', config.url);
+      }
+
       if (isDevelopment) {
-        console.log('🔑 토큰이 요청에 포함됨:', token.substring(0, 20) + '...');
+        console.log('🚀 요청:', {
+          url: config.url,
+          method: config.method,
+          headers: config.headers,
+          data: config.data,
+          isPublicApi,
+        });
       }
-    } else if (!isPublicApi && isDevelopment) {
-      console.warn('⚠️ 인증이 필요한 요청에 토큰이 없음:', config.url);
+      return config;
+    },
+    (error: AxiosError) => {
+      console.error('❌ 요청 에러:', error);
+      return Promise.reject(error);
     }
-    
-    if (isDevelopment) {
-      console.log('🚀 요청:', {
-        url: config.url,
-        method: config.method,
-        headers: config.headers,
-        data: config.data,
-        isPublicApi
-      });
-    }
-    
-    return config;
-  },
-  (error) => {
-    console.error('❌ 요청 에러:', error);
-    return Promise.reject(error);
-  }
-);
+  );
 
-// 응답 인터셉터
-api.interceptors.response.use(
-  (response) => {
-    if (isDevelopment) {
-      console.log('✅ 응답:', {
-        status: response.status,
-        data: response.data,
-      });
-    }
-    return response;
-  },
-  (error) => {
-    if (isDevelopment) {
-      console.error('❌ 응답 에러:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message,
-        code: error.code
-      });
-    }
-    
-    // 요청 취소 처리
-    if (axios.isCancel(error)) {
-      console.log('🚫 요청이 취소되었습니다.');
-      return Promise.reject(new Error('요청이 취소되었습니다.'));
-    }
-    
-    // 401 Unauthorized 오류 처리
-    if (error.response?.status === 401) {
-      console.warn('🔒 401 Unauthorized - 인증 데이터 초기화');
-      clearAuthData();
-      if (logoutHandler) {
-        console.log('🔄 로그아웃 핸들러 호출');
-        logoutHandler();
-      } else {
-        console.warn('⚠️ 로그아웃 핸들러가 설정되지 않음');
-        window.location.href = '/login';
+  // 응답 인터셉터
+  apiInstance.interceptors.response.use(
+    (response: AxiosResponse) => {
+      if (isDevelopment) {
+        console.log('✅ 응답:', {
+          status: response.status,
+          data: response.data,
+        });
       }
-      return Promise.reject(new Error('인증이 필요합니다.'));
-    }
-    
-    if (error.code === 'ECONNABORTED') {
-      console.error('⏰ 요청 시간 초과');
-      return Promise.reject(new Error('요청 시간이 초과되었습니다.'));
-    }
-    
-    if (!error.response) {
-      console.error('🌐 네트워크 에러:', error.message);
-      return Promise.reject(new Error('서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.'));
-    }
-    
-    return Promise.reject(error);
-  }
-);
+      return response;
+    },
+    async (error: unknown) => {
+      // 명시적으로 AxiosError 타입으로 변환
+      const axiosError = error as AxiosError<ErrorResponse>;
+      
+      if (isDevelopment) {
+        console.error('❌ 응답 에러:', {
+          status: axiosError.response?.status,
+          data: axiosError.response?.data,
+          message: axiosError.message,
+          code: axiosError.code,
+        });
+      }
 
-export default api; 
+      if (axios.isCancel(axiosError)) {
+        console.log('🚫 요청이 취소되었습니다.');
+        return Promise.reject(new Error('요청이 취소되었습니다.'));
+      }
+
+      if (axiosError.response?.status === 401) {
+        console.warn('🔒 401 Unauthorized - 인증 데이터 초기화');
+        clearAuthData();
+        if (logoutHandler) {
+          logoutHandler();
+        } else {
+          window.location.href = '/login';
+        }
+        return Promise.reject(new Error('인증이 필요합니다.'));
+      }
+
+      if (axiosError.code === 'ECONNABORTED') {
+        console.error('⏰ 요청 시간 초과');
+        return Promise.reject(new Error('요청 시간이 초과되었습니다.'));
+      }
+
+      if (!axiosError.response) {
+        console.error('🌐 네트워크 에러:', axiosError.message);
+        return Promise.reject(new Error('서버에 연결할 수 없습니다.'));
+      }
+
+      return Promise.reject(axiosError);
+    }
+  );
+
+  return apiInstance;
+};
+
+// 기본 API 인스턴스 생성
+const api = createApi();
+
+export default api;

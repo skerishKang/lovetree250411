@@ -4,7 +4,10 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
 import { toggleLike, addComment } from '@/features/tree/treeSlice';
 import { formatDate } from '@/utils/date';
+import { getYoutubeID } from '@/utils/imageUtils';
 import Loading from '../Loading';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 interface Comment {
   id: string;
@@ -34,7 +37,9 @@ interface TreeNodeDetailProps {
       type: 'image' | 'video';
       url: string;
     };
+    videoUrl?: string;
     comments: Comment[];
+    isPublic: boolean;
   };
 }
 
@@ -45,19 +50,33 @@ const TreeNodeDetail = ({ node }: TreeNodeDetailProps) => {
   const { user } = useSelector((state: RootState) => state.auth);
   const [comment, setComment] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const videoId = node.videoUrl ? getYoutubeID(node.videoUrl) : null;
+
+  useEffect(() => {
+    console.log('TreeNodeDetail 렌더링:', { node, videoId });
+  }, [node, videoId]);
 
   const handleLike = async () => {
     if (!user) {
       navigate('/login');
       return;
     }
-
+    if (node.isLiked) {
+      toast.info('이미 좋아요를 눌렀습니다.', {
+        position: 'bottom-right',
+        autoClose: 1200,
+        hideProgressBar: true,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: false,
+        progress: undefined,
+        icon: '❤️',
+        style: { fontWeight: 500, fontSize: '1rem' }
+      });
+      return;
+    }
     try {
-      if (node.isLiked) {
-        await dispatch(toggleLike(node.id));
-      } else {
-        await dispatch(toggleLike(node.id));
-      }
+      await dispatch(toggleLike(node.id));
     } catch (error) {
       console.error('좋아요 처리 중 오류 발생:', error);
     }
@@ -83,6 +102,26 @@ const TreeNodeDetail = ({ node }: TreeNodeDetailProps) => {
     }
   };
 
+  // 비공개 노드 접근 권한 체크
+  if (node.isPublic === false) {
+    if (!user || user.id !== (node.author?.id || node.author?._id)) {
+      return (
+        <div className="max-w-2xl mx-auto p-6">
+          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
+            <h2 className="text-lg font-semibold mb-2">비공개 노드입니다</h2>
+            <p className="mb-4">이 노드는 작성자 본인만 볼 수 있습니다.</p>
+            <button 
+              onClick={() => navigate(-1)} 
+              className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+            >
+              이전 페이지로 이동
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -101,7 +140,20 @@ const TreeNodeDetail = ({ node }: TreeNodeDetailProps) => {
         <h1 className="text-2xl font-bold mb-4">{node.title}</h1>
         <p className="text-gray-700 mb-6 whitespace-pre-wrap">{node.content}</p>
 
-        {node.media && (
+        {videoId ? (
+          <div className="mb-6 aspect-video">
+            <iframe
+              width="100%"
+              height="100%"
+              src={`https://www.youtube.com/embed/${videoId}`}
+              title="YouTube video player"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="rounded-lg"
+            ></iframe>
+          </div>
+        ) : node.media && (
           <div className="mb-6">
             {node.media.type === 'image' ? (
               <img
@@ -122,8 +174,9 @@ const TreeNodeDetail = ({ node }: TreeNodeDetailProps) => {
         <div className="flex items-center space-x-4 mb-6">
           <button
             onClick={handleLike}
+            disabled={node.isLiked}
             className={`flex items-center space-x-2 ${
-              node.isLiked ? 'text-red-500' : 'text-gray-500'
+              node.isLiked ? 'text-red-500 opacity-60 cursor-not-allowed' : 'text-gray-500'
             }`}
           >
             <svg

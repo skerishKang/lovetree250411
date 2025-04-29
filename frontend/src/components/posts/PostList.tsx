@@ -15,6 +15,7 @@ export const PostList: React.FC<PostListProps> = ({ posts }) => {
               src={post.author.profileImage || '/default-profile.png'}
               alt={post.author.username}
               className="w-10 h-10 rounded-full mr-3"
+              loading="lazy"
             />
             <div>
               <p className="font-semibold">{post.author.username}</p>
@@ -29,6 +30,7 @@ export const PostList: React.FC<PostListProps> = ({ posts }) => {
               src={post.image}
               alt="게시물 이미지"
               className="w-full h-64 object-cover rounded-lg mb-4"
+              loading="lazy"
             />
           )}
           <div className="flex items-center space-x-4">

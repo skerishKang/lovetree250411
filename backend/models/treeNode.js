@@ -22,8 +22,21 @@ const treeNodeSchema = new mongoose.Schema(
       enum: ['seed', 'sprout', 'tree'],
       default: 'seed',
     },
-    mediaUrl: {
+    media: [{
       type: String,
+      trim: true
+    }],
+    followers: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
+    thumbUrl: {
+      type: String,
+      default: ''
+    },
+    recommendationScore: {
+      type: Number,
+      default: 0
     },
     description: {
       type: String,

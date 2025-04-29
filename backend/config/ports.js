@@ -5,7 +5,7 @@
 
 const ports = {
   // 서버 포트
-  SERVER: process.env.PORT || 3001,
+  SERVER: process.env.PORT || 8080,
   
   // 프론트엔드 포트
   FRONTEND: process.env.FRONTEND_PORT || 3000,
@@ -34,4 +34,4 @@ const ports = {
   }
 };
 
-module.exports = ports; 
+module.exports = ports;

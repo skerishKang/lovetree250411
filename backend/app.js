@@ -63,6 +63,8 @@ const chatRoutes = require('./routes/chatRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const treeRoutes = require('./routes/trees');
+const likeRoutes = require('./routes/likeRoutes');
+const followRoutes = require('./routes/followRoutes');
 
 // 라우트 등록
 app.use('/api/auth', authRoutes);
@@ -73,6 +75,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/trees', treeRoutes);
+app.use('/api/likes', likeRoutes);
+app.use('/api/follows', followRoutes);
 
 logger.info('라우트 등록 완료', {
   timestamp: new Date().toISOString(),
@@ -84,7 +88,9 @@ logger.info('라우트 등록 완료', {
     '/api/chat',
     '/api/comments',
     '/api/notifications',
-    '/api/trees'
+    '/api/trees',
+    '/api/likes',
+    '/api/follows'
   ]
 });
 

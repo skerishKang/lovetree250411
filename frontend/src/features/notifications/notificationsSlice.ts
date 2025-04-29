@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 import { RootState } from '@/store';
+import { toast } from 'react-toastify';
 
 interface Notification {
   _id: string;
@@ -13,6 +14,10 @@ interface Notification {
   post?: {
     _id: string;
     content: string;
+  };
+  comment?: {
+    _id: string;
+    text: string;
   };
   read: boolean;
   createdAt: string;
@@ -163,6 +168,32 @@ const notificationsSlice = createSlice({
       });
       state.notifications.unshift(action.payload);
       state.unreadCount += 1;
+      // 토스트 알림
+      let msg = '';
+      switch (action.payload.type) {
+        case 'like':
+          msg = `${action.payload.sender.name || action.payload.sender.username}님이 내 트리를 좋아합니다.`;
+          break;
+        case 'comment':
+          msg = `${action.payload.sender.name || action.payload.sender.username}님이 내 노드에 댓글을 남겼습니다.`;
+          break;
+        case 'follow':
+          msg = `${action.payload.sender.name || action.payload.sender.username}님이 나를 팔로우하기 시작했습니다.`;
+          break;
+        default:
+          msg = '새 알림이 도착했습니다!';
+      }
+      toast.info(msg, {
+        position: 'bottom-right',
+        autoClose: 3500,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        icon: '🔔',
+        style: { fontWeight: 500, fontSize: '1rem' }
+      });
     },
   },
   extraReducers: (builder) => {

@@ -1,6 +1,7 @@
 const Comment = require('../models/Comment');
 const Post = require('../models/Post');
 const logger = require('../utils/logger');
+const mongoose = require('mongoose');
 
 // 댓글 생성
 exports.createComment = async (req, res) => {
@@ -212,5 +213,42 @@ exports.getComments = async (req, res) => {
       message: '댓글 목록을 불러오는데 실패했습니다.',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+};
+
+// 댓글 추가
+exports.addComment = async (req, res) => {
+  try {
+    const { content, targetType, targetId } = req.body;
+    const author = req.user._id;
+    const comment = await Comment.create({ content, author, targetType, targetId });
+    res.status(201).json(comment);
+  } catch (err) {
+    res.status(500).json({ message: '댓글 추가 실패', error: err.message });
+  }
+};
+
+// 댓글 삭제
+exports.removeComment = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const comment = await Comment.findByIdAndDelete(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: '댓글을 찾을 수 없습니다.' });
+    }
+    res.json({ message: '댓글 삭제 성공' });
+  } catch (err) {
+    res.status(500).json({ message: '댓글 삭제 실패', error: err.message });
+  }
+};
+
+// 특정 대상의 댓글 목록 조회
+exports.getComments = async (req, res) => {
+  try {
+    const { targetType, targetId } = req.query;
+    const comments = await Comment.find({ targetType, targetId }).populate('author', 'name profileImage');
+    res.json(comments);
+  } catch (err) {
+    res.status(500).json({ message: '댓글 목록 조회 실패', error: err.message });
   }
 }; 

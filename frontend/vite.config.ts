@@ -1,9 +1,63 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'Love Tree',
+        short_name: 'LoveTree',
+        description: '사람에 빠지는 순간을 간직하는 플랫폼',
+        theme_color: '#16a34a',
+        background_color: '#ffffff',
+        display: 'standalone',
+        icons: [
+          {
+            src: '/icons/icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: '/icons/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+        ],
+        gcm_sender_id: '103953800507',
+      },
+      workbox: {
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-stylesheets',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        enabled: true,
+      },
+      srcDir: 'src',
+      filename: 'service-worker.js',
+      strategies: 'injectManifest',
+      injectRegister: 'auto',
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -23,26 +77,34 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        rewrite: (path) => path  // 경로를 그대로 유지하도록 변경
       },
       '/socket.io': {
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
         ws: true,
+      },
+      // YouTube iframe을 위한 CORS 설정
+      '/youtube': {
+        target: 'https://www.youtube.com',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/youtube/, '')
       }
     },
-    onError: (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.error(`\n🚫 포트 3000이 이미 사용 중입니다.`);
-        console.error('다음 명령어로 포트를 사용 중인 프로세스를 종료할 수 있습니다:');
-        console.error(`Windows: netstat -ano | findstr :3000`);
-        console.error(`Mac/Linux: lsof -i :3000\n`);
-      }
-    }
+    cors: true,
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'c96e-49-168-168-61.ngrok-free.app',
+      '.ngrok-free.app'  // 모든 ngrok 하위 도메인 허용
+    ]
+    // onError 옵션 제거: Vite의 ServerOptions에는 onError가 없습니다.
   },
   build: {
     outDir: 'dist',
     sourcemap: true,
+    module: 'ESNext',
   },
-}); 
+});

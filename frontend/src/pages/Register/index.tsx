@@ -69,9 +69,12 @@ const Register = () => {
                 },
               })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-required="true"
+              aria-invalid={!!errors.name}
+              aria-describedby={errors.name ? 'name-error' : undefined}
             />
             {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+              <p id="name-error" className="mt-1 text-sm text-red-600">{errors.name.message}</p>
             )}
           </div>
 
@@ -93,9 +96,12 @@ const Register = () => {
                 },
               })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-required="true"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? 'email-error' : undefined}
             />
             {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              <p id="email-error" className="mt-1 text-sm text-red-600">{errors.email.message}</p>
             )}
           </div>
 
@@ -117,11 +123,12 @@ const Register = () => {
                 },
               })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-required="true"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? 'password-error' : undefined}
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.password.message}
-              </p>
+              <p id="password-error" className="mt-1 text-sm text-red-600">{errors.password.message}</p>
             )}
           </div>
 
@@ -141,11 +148,12 @@ const Register = () => {
                   value === password || '비밀번호가 일치하지 않습니다',
               })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-required="true"
+              aria-invalid={!!errors.confirmPassword}
+              aria-describedby={errors.confirmPassword ? 'confirmPassword-error' : undefined}
             />
             {errors.confirmPassword && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.confirmPassword.message}
-              </p>
+              <p id="confirmPassword-error" className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
             )}
           </div>
 

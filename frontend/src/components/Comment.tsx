@@ -88,6 +88,7 @@ const Comment = ({ comment }: CommentProps) => {
             src={comment.author.profileImage || 'https://via.placeholder.com/32'}
             alt={comment.author.username}
             className="w-8 h-8 rounded-full"
+            loading="lazy"
             onError={(e) => {
               console.log('댓글 작성자 프로필 이미지 로드 실패:', comment.author.username);
               e.currentTarget.src = 'https://via.placeholder.com/32';

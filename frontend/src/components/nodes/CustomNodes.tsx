@@ -1,5 +1,6 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
+import { getYoutubeID } from '@/utils/imageUtils';
 
 // 색상별 스타일 매핑
 const colorStyles = {
@@ -56,6 +57,11 @@ export const PostNode = memo(({ data }: NodeProps) => {
   const colorStyle = colorStyles[data.color || 'pink'];
   const sizeStyle = sizeStyles[data.size || 'medium'];
   const fontSize = `text-[${data.fontSize || '14'}px]`;
+  const videoId = data.videoUrl ? getYoutubeID(data.videoUrl) : null;
+  
+  useEffect(() => {
+    console.log('PostNode 렌더링:', { data, videoId });
+  }, [data, videoId]);
 
   return (
     <div className={`shadow-lg rounded-lg border-2 ${colorStyle.border} ${colorStyle.bg} ${sizeStyle.width}`}>
@@ -66,8 +72,17 @@ export const PostNode = memo(({ data }: NodeProps) => {
       />
       <div className={`${sizeStyle.padding}`}>
         <div className={`font-bold ${colorStyle.text} ${fontSize}`}>
-          {data.label}
+          {data.videoTitle || data.label}
         </div>
+        {videoId && (
+          <div className="mt-2 rounded overflow-hidden">
+            <img 
+              src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
+              alt="YouTube Thumbnail"
+              className="w-full h-auto rounded"
+            />
+          </div>
+        )}
         {data.content && (
           <div className={`mt-2 text-gray-600 max-h-20 overflow-y-auto ${fontSize}`}>
             {data.content}
@@ -88,6 +103,11 @@ export const CustomNode = memo(({ data }: NodeProps) => {
   const colorStyle = colorStyles[data.color || 'blue'];
   const sizeStyle = sizeStyles[data.size || 'medium'];
   const fontSize = `text-[${data.fontSize || '14'}px]`;
+  const videoId = data.videoUrl ? getYoutubeID(data.videoUrl) : null;
+  
+  useEffect(() => {
+    console.log('CustomNode 렌더링:', { data, videoId });
+  }, [data, videoId]);
 
   return (
     <div className={`shadow-lg rounded-lg border-2 ${colorStyle.border} ${colorStyle.bg} ${sizeStyle.width}`}>
@@ -98,8 +118,17 @@ export const CustomNode = memo(({ data }: NodeProps) => {
       />
       <div className={`${sizeStyle.padding}`}>
         <div className={`font-bold ${colorStyle.text} ${fontSize}`}>
-          {data.label}
+          {data.videoTitle || data.label}
         </div>
+        {videoId && (
+          <div className="mt-2 rounded overflow-hidden">
+            <img 
+              src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
+              alt="YouTube Thumbnail"
+              className="w-full h-auto rounded"
+            />
+          </div>
+        )}
         {data.content && (
           <div className={`mt-2 text-gray-600 max-h-20 overflow-y-auto ${fontSize}`}>
             {data.content}

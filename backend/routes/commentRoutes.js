@@ -46,4 +46,13 @@ router.delete('/:id', auth, logRequest, commentController.deleteComment);
 // 게시물의 댓글 목록 가져오기
 router.get('/post/:postId', logRequest, commentController.getComments);
 
+// 댓글 추가
+router.post('/', auth, commentController.addComment);
+
+// 댓글 삭제
+router.delete('/:commentId', auth, commentController.removeComment);
+
+// 특정 대상의 댓글 목록 조회
+router.get('/', commentController.getComments);
+
 module.exports = router; 

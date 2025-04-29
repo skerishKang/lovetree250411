@@ -8,6 +8,8 @@ import CommentsSection from './CommentsSection';
 import { HeartIcon } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 interface PostProps {
   post: {
@@ -47,6 +49,17 @@ const Post: React.FC<PostProps> = ({ post }) => {
       willLike: !post.isLiked 
     });
     dispatch(likePost(post.id));
+    toast(post.isLiked ? '좋아요 취소!' : '좋아요!', {
+      position: 'bottom-right',
+      autoClose: 1200,
+      hideProgressBar: true,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: false,
+      progress: undefined,
+      icon: post.isLiked ? '💔' : '❤️',
+      style: { fontWeight: 500, fontSize: '1rem' }
+    });
   };
 
   const handleUpdate = async () => {
@@ -106,6 +119,7 @@ const Post: React.FC<PostProps> = ({ post }) => {
             src={post.author.profileImage || 'https://via.placeholder.com/40'}
             alt={post.author.username}
             className="w-10 h-10 rounded-full"
+            loading="lazy"
             onError={(e) => {
               console.log('프로필 이미지 로드 실패:', post.author.username);
               e.currentTarget.src = 'https://via.placeholder.com/40';
@@ -216,6 +230,7 @@ const Post: React.FC<PostProps> = ({ post }) => {
           src={post.image}
           alt="Post"
           className="w-full rounded-lg mb-4"
+          loading="lazy"
           onError={(e) => {
             console.log('게시물 이미지 로드 실패:', post.id);
             e.currentTarget.style.display = 'none';
@@ -226,14 +241,17 @@ const Post: React.FC<PostProps> = ({ post }) => {
       <div className="flex items-center space-x-4 mt-4">
         <button
           onClick={handleLike}
-          className="flex items-center text-gray-500 hover:text-red-500"
+          className={`flex items-center transition-all duration-200 focus:outline-none
+            ${post.isLiked ? 'text-red-500' : 'text-gray-500'}
+            hover:text-red-500 active:scale-110`}
+          aria-label="좋아요"
         >
           {post.isLiked ? (
-            <HeartIconSolid className="w-5 h-5 text-red-500" />
+            <HeartIconSolid className="w-5 h-5 text-red-500 transition-all duration-200" />
           ) : (
-            <HeartIcon className="w-5 h-5" />
+            <HeartIcon className="w-5 h-5 transition-all duration-200" />
           )}
-          <span className="ml-1">{post.likes}</span>
+          <span className="ml-1 font-semibold">{post.likes}</span>
         </button>
         <button
           onClick={toggleComments}

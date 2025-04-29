@@ -53,24 +53,28 @@ const TreeNodeForm: React.FC<TreeNodeFormProps> = ({ userId, parentId, node, onC
         <h2 className="text-xl font-bold mb-4">{node ? '노드 수정' : '새 노드 생성'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">내용</label>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="content">내용</label>
             <input
+              id="content"
               type="text"
               name="content"
               value={formData.content}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               required
+              aria-required="true"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">타입</label>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="type">타입</label>
             <select
+              id="type"
               name="type"
               value={formData.type}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              aria-required="true"
             >
               <option value="root">루트</option>
               <option value="branch">가지</option>
@@ -79,12 +83,14 @@ const TreeNodeForm: React.FC<TreeNodeFormProps> = ({ userId, parentId, node, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">단계</label>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="stage">단계</label>
             <select
+              id="stage"
               name="stage"
               value={formData.stage}
               onChange={handleChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              aria-required="true"
             >
               <option value="썸">썸</option>
               <option value="입덕">입덕</option>
@@ -94,8 +100,9 @@ const TreeNodeForm: React.FC<TreeNodeFormProps> = ({ userId, parentId, node, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">설명</label>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="description">설명</label>
             <textarea
+              id="description"
               name="description"
               value={formData.description}
               onChange={handleChange}
@@ -105,8 +112,9 @@ const TreeNodeForm: React.FC<TreeNodeFormProps> = ({ userId, parentId, node, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">미디어 URL</label>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="mediaUrl">미디어 URL</label>
             <input
+              id="mediaUrl"
               type="url"
               name="mediaUrl"
               value={formData.mediaUrl}
@@ -116,8 +124,9 @@ const TreeNodeForm: React.FC<TreeNodeFormProps> = ({ userId, parentId, node, onC
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">태그 (쉼표로 구분)</label>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="tags">태그 (쉼표로 구분)</label>
             <input
+              id="tags"
               type="text"
               name="tags"
               value={formData.tags}
@@ -128,6 +137,7 @@ const TreeNodeForm: React.FC<TreeNodeFormProps> = ({ userId, parentId, node, onC
 
           <div className="flex items-center">
             <input
+              id="isPublic"
               type="checkbox"
               name="isPublic"
               checked={formData.isPublic}

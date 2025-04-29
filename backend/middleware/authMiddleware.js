@@ -1,3 +1,4 @@
+console.log('authMiddleware: 파일 정상 진입');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const logger = require('../utils/logger');

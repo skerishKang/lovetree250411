@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../features/store';
+import { RootState } from '../store';
 import { setActiveChat } from '../features/chat/chatSlice';
 import axios from 'axios';
 

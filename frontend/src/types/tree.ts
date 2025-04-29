@@ -14,6 +14,14 @@ export interface TreeNode {
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+  expanded?: boolean;
+  author?: {
+    _id: string;
+    name: string;
+    profileImage?: string;
+  };
+  mediaImage?: string;
+  videoUrl?: string;
 }
 
 export interface Comment {
@@ -34,6 +42,7 @@ export interface TreeState {
   nodes: TreeNode[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
+  selectedNode: TreeNode | null;
 }
 
 export interface DragItem {

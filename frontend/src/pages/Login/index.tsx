@@ -63,9 +63,12 @@ const Login = () => {
                 },
               })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-required="true"
+              aria-invalid={!!errors.email}
+              aria-describedby={errors.email ? 'login-email-error' : undefined}
             />
             {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              <p id="login-email-error" className="mt-1 text-sm text-red-600">{errors.email.message}</p>
             )}
           </div>
 
@@ -87,11 +90,12 @@ const Login = () => {
                 },
               })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-required="true"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? 'login-password-error' : undefined}
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.password.message}
-              </p>
+              <p id="login-password-error" className="mt-1 text-sm text-red-600">{errors.password.message}</p>
             )}
           </div>
 

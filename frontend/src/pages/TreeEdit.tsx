@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, memo, useRef } from 'react'; // Added useRef
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../app/store';
-import { fetchTreeById, updateTreeNodes } from '../features/trees/treeSlice';
-import ReactFlow, { 
-  Background, 
+import { RootState, AppDispatch } from '../store'; // Assuming AppDispatch is defined in store
+import { fetchTreeById, updateTreeNodes, updateTree } from '../features/trees/treeSlice';
+import ReactFlow, {
+  Background,
   Controls,
   Node,
   Edge,
@@ -14,15 +14,31 @@ import ReactFlow, {
   useEdgesState,
   Panel,
   NodeMouseHandler,
-  PanelPosition,
   ReactFlowInstance,
-  MarkerType,
   ConnectionMode,
   Handle,
-  Position
+  Position,
+  NodeChange, // Import NodeChange for better typing
+  EdgeChange, // Import EdgeChange for better typing
+  applyNodeChanges, // Import applyNodeChanges
+  applyEdgeChanges, // Import applyEdgeChanges
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import './TreeEdit.css';
+import './TreeEdit.css'; // Make sure this path is correct
+import YoutubeSearch from '../components/YoutubeSearch'; // Make sure this path is correct
+import { addNotification } from '../features/notifications/notificationsSlice'; // Make sure this path is correct
+import { selectUser } from '../features/auth/authSelectors'; // Make sure this path is correct
+import Modal from '../components/Modal'; // Make sure this path is correct
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'; // Added DragEndEvent
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// TODO: 이 파일의 useSelector 구조와 updateTree 페이로드 구조는
+//       slice/thunk 정의가 바뀌면 반드시 점검/수정할 것!
+// FIXME: 현재는 동작하지만, 타입 경고가 생기면 즉시 고칠 것!
+// NOTE: 타입 경고/에러가 발생하면 반드시 안전하게 수정할 것!
+
+// --- Interfaces ---
 
 interface NodeData {
   label: string;
@@ -33,18 +49,66 @@ interface NodeData {
   comments?: Array<{
     id: string;
     text: string;
-    author: string;
+    author: string; // Consider changing to authorId and fetching author details
     createdAt: string;
   }>;
+  author?: { // This might represent the node creator, not comment author
+    _id: string;
+    name: string;
+    profileImage?: string;
+  };
+  mediaImage?: string; // Single image URL (consider replacing with mediaImages)
+  mediaImages?: { url: string; caption: string }[]; // Multiple image URLs
+  mediaVideos?: { url: string; caption: string }[]; // Multiple video URLs
 }
 
-const initialNodes: Node[] = [];
+interface NodeDetailModalProps {
+  node: Node<NodeData>;
+  onClose: () => void;
+  onSave: (nodeId: string, data: NodeData) => void; // Pass nodeId for saving
+  isEdit: boolean;
+  onToggleEdit: () => void;
+}
 
-const getYoutubeID = (url: string) => {
-  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+// --- Helper Functions ---
+
+// Updated regex: Supports various YouTube URL formats
+const getYoutubeID = (url: string): string | null => {
+  if (!url) return null;
+   // More robust regex to handle various URL formats (including shorts, embed, etc.) and query params
+  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/;
   const match = url.match(regExp);
-  return (match && match[7].length === 11) ? match[7] : null;
+  return match ? match[1] : null;
 };
+
+// Fetch YouTube metadata (placeholder - requires API key for full data)
+const fetchYoutubeMetadata = async (videoId: string): Promise<{ title: string; description: string; thumbnailUrl: string } | null> => {
+  try {
+    // Placeholder: In a real app, you'd call the YouTube Data API v3 here
+    // const apiKey = 'YOUR_YOUTUBE_API_KEY';
+    // const response = await axios.get(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`);
+    // if (response.data.items && response.data.items.length > 0) {
+    //   const snippet = response.data.items[0].snippet;
+    //   return {
+    //     title: snippet.title,
+    //     description: snippet.description,
+    //     thumbnailUrl: snippet.thumbnails.medium.url, // Or mqdefault, high, etc.
+    //   };
+    // }
+    // Fallback if API call fails or no key
+    console.warn("YouTube API key not configured. Fetching basic metadata only.");
+    return {
+      title: '', // Cannot get title without API
+      description: '', // Cannot get description without API
+      thumbnailUrl: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+    };
+  } catch (error) {
+    console.error('Failed to fetch YouTube metadata:', error);
+    return null;
+  }
+};
+
+// --- Constants ---
 
 const nodeDefaults = {
   style: {
@@ -54,11 +118,23 @@ const nodeDefaults = {
     cursor: 'pointer',
     background: 'white',
     boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-  }
+  },
 };
 
-const CustomNode = ({ data, id, selected }: { data: NodeData; id: string; selected: boolean }) => {
-  const videoId = data.videoUrl ? getYoutubeID(data.videoUrl) : null;
+const initialNodes: Node<NodeData>[] = []; // Start with empty initial nodes
+const initialEdges: Edge[] = [];
+
+// --- Sub-Components ---
+
+// CustomNode: Renders the node in ReactFlow
+const CustomNode = memo(({ data, id, selected }: { data: NodeData; id: string; selected: boolean }) => {
+  const videoUrl = data.videoUrl; // Use only videoUrl
+  const videoId = videoUrl ? getYoutubeID(videoUrl) : null;
+
+  // Optional: Log rendering for debugging
+  // useEffect(() => {
+  //   console.log(`[CustomNode ${id}] Rendering:`, { data, videoId, videoUrl });
+  // }, [data, videoId, id, videoUrl]);
 
   return (
     <div style={{
@@ -66,80 +142,121 @@ const CustomNode = ({ data, id, selected }: { data: NodeData; id: string; select
       border: selected ? '2px solid #3b82f6' : '1px solid #ddd',
       boxShadow: selected ? '0 0 0 2px rgba(59, 130, 246, 0.5)' : nodeDefaults.style.boxShadow,
       position: 'relative',
-      padding: '15px'
+      padding: '15px',
+      width: videoId ? '220px' : 'auto', // Adjust width based on content
+      minWidth: '150px', // Ensure minimum width
     }}>
-      <div className="flex items-center justify-between">
-        <div className="font-medium">{data.videoTitle || data.label}</div>
+      {/* Handles */}
+      <Handle type="source" position={Position.Top} id={`t-s-${id}`} isConnectable={true} style={{ background: '#555', top: '-5px' }} />
+      <Handle type="target" position={Position.Top} id={`t-t-${id}`} isConnectable={true} style={{ background: '#aaa', top: '-5px', left: 'auto', right: '10px' }} />
+      <Handle type="source" position={Position.Right} id={`r-s-${id}`} isConnectable={true} style={{ background: '#555', right: '-5px' }} />
+      <Handle type="target" position={Position.Right} id={`r-t-${id}`} isConnectable={true} style={{ background: '#aaa', right: '-5px', top: 'auto', bottom: '10px' }} />
+      <Handle type="source" position={Position.Bottom} id={`b-s-${id}`} isConnectable={true} style={{ background: '#555', bottom: '-5px' }} />
+      <Handle type="target" position={Position.Bottom} id={`b-t-${id}`} isConnectable={true} style={{ background: '#aaa', bottom: '-5px', left: 'auto', right: '10px' }} />
+      <Handle type="source" position={Position.Left} id={`l-s-${id}`} isConnectable={true} style={{ background: '#555', left: '-5px' }} />
+      <Handle type="target" position={Position.Left} id={`l-t-${id}`} isConnectable={true} style={{ background: '#aaa', left: '-5px', top: 'auto', bottom: '10px' }} />
+
+      {/* Node Content */}
+      <div className="flex items-center justify-between mb-1">
+        <div className="font-medium truncate" title={data.videoTitle || data.label}>{data.videoTitle || data.label}</div>
         {data.likes !== undefined && (
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 flex-shrink-0 ml-2">
             ❤️ {data.likes}
           </div>
         )}
       </div>
       {videoId && (
-        <div className="mt-2 rounded overflow-hidden">
-          <img 
+        <div className="mt-2 rounded overflow-hidden aspect-video"> {/* Use aspect-video for consistent ratio */}
+          <img
             src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
-            alt="YouTube Thumbnail"
-            className="w-full h-auto"
+            alt={`Thumbnail: ${data.videoTitle || data.label || 'Video'}`}
+            loading="lazy"
+            className="w-full h-full object-cover" // Ensure image covers the area
+            tabIndex={-1} // Not interactive in the node view itself
           />
         </div>
       )}
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        id={`right-${id}`}
-        isConnectable={true}
-        style={{ background: '#555', width: '15px', height: '15px', right: '-8px' }} 
-      />
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        id={`left-${id}`}
-        isConnectable={true}
-        style={{ background: '#555', width: '15px', height: '15px', left: '-8px' }} 
-      />
-      <Handle 
-        type="source" 
-        position={Position.Top} 
-        id={`top-${id}`}
-        isConnectable={true}
-        style={{ background: '#555', width: '15px', height: '15px', top: '-8px' }} 
-      />
-      <Handle 
-        type="target" 
-        position={Position.Bottom} 
-        id={`bottom-${id}`}
-        isConnectable={true}
-        style={{ background: '#555', width: '15px', height: '15px', bottom: '-8px' }} 
-      />
+      {/* You could add a short description preview here if needed */}
+      {/* {data.description && <p className="text-xs text-gray-500 mt-1 truncate">{data.description}</p>} */}
     </div>
   );
-};
+});
+CustomNode.displayName = 'CustomNode'; // Add display name for React DevTools
 
-interface NodeDetailModalProps {
-  node: Node<NodeData>;
-  onClose: () => void;
-  onSave: (data: NodeData) => void;
-  isEdit: boolean;
-  onToggleEdit: () => void;
+
+// Sortable Thumbnail Item (Images)
+function SortableImageThumb({ id, src, alt, onRemove, onDownload, onShare, filename }: {
+  id: string; src: string; alt: string; onRemove: () => void; onDownload: () => void; onShare: () => void; filename: string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: isDragging ? 'grabbing' : 'grab', // Change cursor while dragging
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative group w-24 h-24 flex-shrink-0">
+      <img
+        src={src}
+        alt={alt}
+        className="object-cover w-full h-full rounded border" // Use w-full h-full
+        loading="lazy"
+        tabIndex={0} // Keep focusable if needed
+      />
+      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center opacity-0 group-hover:opacity-100">
+        <div className="flex gap-1">
+           <button type="button" onClick={onRemove} className="bg-white bg-opacity-80 rounded-full p-1 text-xs text-red-500 hover:bg-red-100" aria-label="Remove image" title="Remove" tabIndex={0}>🗑️</button>
+           <a href={src} download={filename || 'image'} onClick={onDownload} className="bg-white bg-opacity-80 rounded-full p-1 text-xs text-blue-500 hover:bg-blue-100" aria-label="Download image" title="Download" tabIndex={0}>⬇️</a>
+           <button type="button" onClick={onShare} className="bg-white bg-opacity-80 rounded-full p-1 text-xs text-green-500 hover:bg-green-100" aria-label="Copy image link" title="Copy Link" tabIndex={0}>🔗</button>
+        </div>
+      </div>
+      <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 rounded px-1 py-0.5 text-[10px] text-white truncate max-w-[calc(100%-8px)]" title={filename}>{filename || 'image'}</div>
+    </div>
+  );
 }
 
-// 유튜브 메타데이터 가져오기 함수
-const fetchYoutubeMetadata = async (videoId: string) => {
-  try {
-    // API 키가 없는 경우, 클라이언트 측에서만 썸네일 URL을 생성합니다
-    return {
-      title: '', // API 연동 시 response.data.items[0].snippet.title
-      description: '', // API 연동 시 response.data.items[0].snippet.description
-      thumbnailUrl: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
-    };
-  } catch (error) {
-    console.error('Failed to fetch YouTube metadata:', error);
-    return null;
-  }
-};
+// Sortable Thumbnail Item (Videos)
+function SortableVideoThumb({ id, vidId, alt, onRemove, onOpen, onShare, filename }: {
+   id: string; vidId: string | null; alt: string; onRemove: () => void; onOpen: () => void; onShare: () => void; filename: string;
+ }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    cursor: isDragging ? 'grabbing' : 'grab',
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative group w-40 h-24 flex-shrink-0">
+      {vidId ? (
+        <img
+          src={`https://img.youtube.com/vi/${vidId}/mqdefault.jpg`}
+          alt={alt}
+          className="object-cover w-full h-full rounded border cursor-pointer"
+          loading="lazy"
+          tabIndex={0}
+          onClick={onOpen}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded border text-xs text-gray-400 p-2 text-center">Invalid Link</div>
+      )}
+       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center opacity-0 group-hover:opacity-100">
+         <div className="flex gap-1">
+           <button type="button" onClick={onRemove} className="bg-white bg-opacity-80 rounded-full p-1 text-xs text-red-500 hover:bg-red-100" aria-label="Remove video" title="Remove" tabIndex={0}>🗑️</button>
+           {vidId && (
+            <a href={`https://www.youtube.com/watch?v=${vidId}`} target="_blank" rel="noopener noreferrer" className="bg-white bg-opacity-80 rounded-full p-1 text-xs text-blue-500 hover:bg-blue-100" aria-label="Open video in new tab" title="Open" tabIndex={0}>↗️</a>
+           )}
+           <button type="button" onClick={onShare} className="bg-white bg-opacity-80 rounded-full p-1 text-xs text-green-500 hover:bg-green-100" aria-label="Copy video link" title="Copy Link" tabIndex={0}>🔗</button>
+         </div>
+       </div>
+      <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 rounded px-1 py-0.5 text-[10px] text-white truncate max-w-[calc(100%-8px)]" title={filename}>{filename || 'video'}</div>
+    </div>
+  );
+}
 
+
+// Node Detail Modal Component
 const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
   node,
   onClose,
@@ -147,745 +264,886 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
   isEdit,
   onToggleEdit,
 }) => {
-  const [formData, setFormData] = useState<NodeData>({
-    ...node.data,
-  });
-  const [videoId, setVideoId] = useState<string | null>(
-    node.data.videoUrl ? getYoutubeID(node.data.videoUrl) : null
-  );
+  const [formData, setFormData] = useState<NodeData>({ ...node.data });
+  const [videoId, setVideoId] = useState<string | null>(null); // Derived state for main video preview
   const [newComment, setNewComment] = useState('');
+  const [showYoutubeSearch, setShowYoutubeSearch] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false); // Renamed for clarity
+  const [imageUploading, setImageUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null); // Generic upload error
+  const [mediaModalOpen, setMediaModalOpen] = useState(false); // For viewing single media items
+  const [mediaModalContent, setMediaModalContent] = useState<{ type: 'image' | 'video', url: string } | null>(null);
+  const [newVideoUrl, setNewVideoUrl] = useState(''); // For adding to mediaVideos list
 
+  const dispatch: AppDispatch = useDispatch();
+  const user = useSelector(selectUser);
+
+  // Initialize form data and video ID when node changes
+  useEffect(() => {
+    setFormData({ ...node.data });
+    setVideoId(node.data.videoUrl ? getYoutubeID(node.data.videoUrl) : null);
+     // Reset other states
+    setNewComment('');
+    setShowYoutubeSearch(false);
+    setIsDraggingOver(false);
+    setUploadError(null);
+    setNewVideoUrl('');
+  }, [node]);
+
+
+  // Drag and Drop Handlers for YouTube URL input
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text'); // Handle different drop types
+    console.log('Dropped URL:', url);
+    if (url) {
+      const vidId = getYoutubeID(url);
+      if (vidId) {
+        const fullUrl = `https://www.youtube.com/watch?v=${vidId}`;
+        setFormData(prev => ({ ...prev, videoUrl: fullUrl })); // Update form data
+        setVideoId(vidId); // Update preview ID
+        // Fetch metadata if title/description are missing
+        if (!formData.videoTitle || !formData.description) {
+           const metadata = await fetchYoutubeMetadata(vidId);
+           if (metadata) {
+               setFormData(prev => ({
+                   ...prev,
+                   videoTitle: prev.videoTitle || metadata.title || `Video ${vidId}`, // Provide fallback title
+                   label: prev.label || metadata.title || `Video ${vidId}`, // Also update label
+                   description: prev.description || metadata.description,
+               }));
+           }
+        }
+      } else {
+          setUploadError('Dropped item is not a valid YouTube link.');
+          setTimeout(() => setUploadError(null), 3000); // Clear error after 3 seconds
+      }
+    }
+  };
+
+  // Handler for YouTube URL input change
   const handleUrlChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const url = e.target.value;
-    const newVideoId = getYoutubeID(url);
-    setVideoId(newVideoId);
-    setFormData(prev => ({ ...prev, videoUrl: url }));
-    
-    // 새 비디오 ID가 있고, 제목과 설명이 비어있는 경우에만 메타데이터 가져오기
-    if (newVideoId && (!formData.videoTitle || !formData.description)) {
-      const metadata = await fetchYoutubeMetadata(newVideoId);
-      if (metadata) {
-        setFormData(prev => ({
-          ...prev,
-          videoTitle: prev.videoTitle || metadata.title,
-          description: prev.description || metadata.description
-        }));
-      }
+    setFormData(prev => ({ ...prev, videoUrl: url })); // Update immediately for input value
+
+    const newVidId = getYoutubeID(url);
+    setVideoId(newVidId); // Update preview ID
+
+    // Basic validation (can be more robust)
+    const youtubeRegExp = /^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(-nocookie)?\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/|shorts\/)?)([\w\-]+)(\S+)?$/;
+    if (url && !youtubeRegExp.test(url) && url !== '') {
+        setUploadError('Invalid YouTube URL format.');
+    } else {
+        setUploadError(null); // Clear error on valid or empty input
+         // Fetch metadata if ID is valid and title/desc are missing
+        if (newVidId && (!formData.videoTitle || !formData.description)) {
+            const metadata = await fetchYoutubeMetadata(newVidId);
+            if (metadata) {
+                setFormData(prev => ({
+                    ...prev,
+                    videoTitle: prev.videoTitle || metadata.title || `Video ${newVidId}`,
+                    label: prev.label || metadata.title || `Video ${newVidId}`,
+                    description: prev.description || metadata.description,
+                }));
+            }
+        }
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    let url = e.dataTransfer.getData('text');
-    
-    if (url) {
-      const videoId = getYoutubeID(url);
-      if (videoId) {
-        const fullUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        setVideoId(videoId);
-        setFormData(prev => ({ 
-          ...prev, 
-          videoUrl: fullUrl,
-        }));
-      }
-    }
-  };
-
+   // Handler for saving the form
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
-    onToggleEdit();
+     // Ensure label exists, fallback to video title or default
+    const finalData = {
+        ...formData,
+        label: formData.label || formData.videoTitle || 'Untitled Node'
+    };
+    onSave(node.id, finalData); // Pass node ID and updated data
+    // onClose(); // Typically close after save, unless onSave handles it
   };
 
+   // Handler for adding comments
   const handleAddComment = () => {
-    if (!newComment.trim()) return;
-    
+    if (!newComment.trim() || !user) return;
     const comment = {
-      id: Date.now().toString(),
-      text: newComment,
-      author: '사용자',
-      createdAt: new Date().toLocaleString()
+      id: Date.now().toString(), // Use timestamp or UUID
+      text: newComment.trim(),
+      author: user.name || 'Anonymous', // Use logged-in user's name
+      // authorId: user._id, // Store user ID instead of name potentially
+      createdAt: new Date().toISOString() // Use ISO string for consistency
     };
-
     setFormData(prev => ({
       ...prev,
       comments: [...(prev.comments || []), comment]
     }));
     setNewComment('');
+
+     // Dispatch notification (check if node author exists and is not the current user)
+    if (node.data.author && user && user._id !== node.data.author._id) {
+      dispatch(addNotification({
+        _id: `${node.id}-comment-${user._id}-${Date.now()}`, // Example unique ID
+        type: 'comment',
+        sender: user, // Assuming user object matches sender structure
+        post: { _id: node.id, content: node.data.label }, // Adapt as needed
+        comment: { _id: comment.id, text: comment.text }, // Adapt as needed
+        recipientId: node.data.author._id, // Add recipient ID
+        read: false,
+        createdAt: comment.createdAt
+      }));
+    }
   };
 
+  // Handler for uploading multiple node images
+  const handleNodeImagesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setImageUploading(true);
+    setUploadError(null);
+    const uploadedImages: { url: string; caption: string }[] = [];
+    const errors: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) {
+        errors.push(`"${file.name}" is not an image.`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) { // Example: 10MB limit
+        errors.push(`"${file.name}" exceeds the 10MB size limit.`);
+        continue;
+      }
+
+      try {
+        const formDataObj = new FormData();
+        formDataObj.append('file', file); // Key 'file' expected by backend
+        // Replace with your actual API endpoint
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formDataObj,
+          // Add headers if needed (e.g., Authorization)
+          // headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+           const errorData = await res.json().catch(() => ({ message: 'Upload failed with status: ' + res.status }));
+           throw new Error(errorData.message || `Failed to upload "${file.name}"`);
+        }
+        const data = await res.json();
+        if (!data.url) {
+            throw new Error(`Upload succeeded for "${file.name}" but no URL was returned.`);
+        }
+        uploadedImages.push({ url: data.url, caption: '' }); // Add caption later if needed
+      } catch (err: any) {
+        errors.push(err.message || `Error uploading "${file.name}".`);
+      }
+    }
+
+    setImageUploading(false);
+    if (errors.length > 0) {
+        setUploadError(errors.join('\n')); // Show all errors
+         // Optionally clear error after some time
+        // setTimeout(() => setUploadError(null), 5000);
+    }
+
+    if (uploadedImages.length > 0) {
+        setFormData(prev => ({
+            ...prev,
+            mediaImages: [...(prev.mediaImages || []), ...uploadedImages]
+        }));
+    }
+  };
+
+  // Handler for adding a new video URL to the list
+  const handleAddNodeVideo = () => {
+    if (!newVideoUrl.trim()) return;
+     const vidId = getYoutubeID(newVideoUrl.trim());
+     if (!vidId) {
+         setUploadError("Invalid YouTube URL format for additional video.");
+         setTimeout(() => setUploadError(null), 3000);
+         return;
+     }
+     const urlToAdd = `https://www.youtube.com/watch?v=${vidId}`; // Standardize URL
+    setFormData(prev => ({
+      ...prev,
+      mediaVideos: [...(prev.mediaVideos || []), { url: urlToAdd, caption: '' }]
+    }));
+    setNewVideoUrl(''); // Clear input after adding
+     setUploadError(null); // Clear any previous error
+  };
+
+  // Handlers for removing items from lists
+  const handleRemoveNodeImageAt = (idx: number) => {
+    setFormData(prev => ({
+      ...prev,
+      mediaImages: (prev.mediaImages || []).filter((_, i) => i !== idx)
+    }));
+  };
+
+  const handleRemoveNodeVideoAt = (idx: number) => {
+    setFormData(prev => ({
+      ...prev,
+      mediaVideos: (prev.mediaVideos || []).filter((_, i) => i !== idx)
+    }));
+  };
+
+  // Handler for DND reordering
+  const handleDragEnd = (event: DragEndEvent, type: 'images' | 'videos') => {
+      const { active, over } = event;
+      if (over && active.id !== over.id) {
+          setFormData(prev => {
+              const items = type === 'images' ? prev.mediaImages : prev.mediaVideos;
+              if (!items) return prev;
+              const oldIndex = items.findIndex(item => item.url === active.id);
+              const newIndex = items.findIndex(item => item.url === over.id);
+              if (oldIndex === -1 || newIndex === -1) return prev; // Should not happen
+
+              const newItems = arrayMove(items, oldIndex, newIndex);
+              return type === 'images'
+                  ? { ...prev, mediaImages: newItems }
+                  : { ...prev, mediaVideos: newItems };
+          });
+      }
+  };
+
+   // Open media in modal
+   const handleMediaClick = (type: 'image' | 'video', url: string) => {
+     setMediaModalContent({ type, url });
+     setMediaModalOpen(true);
+   };
+
+   // Copy link to clipboard
+   const copyToClipboard = (text: string, type: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            dispatch(addNotification({ _id: Date.now().toString(), message: `${type} link copied!`, type: 'info' }));
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            dispatch(addNotification({ _id: Date.now().toString(), message: `Failed to copy ${type} link.`, type: 'error' }));
+        });
+   };
+
+   const sensors = useSensors(useSensor(PointerSensor, {
+     // Require the mouse to move by 10 pixels before activating
+     // Improves compatibility with click handlers
+     activationConstraint: {
+       distance: 10,
+     },
+   }));
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div 
-        className="bg-white rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto"
-        onDrop={handleDrop}
-        onDragOver={(e) => e.preventDefault()}
-      >
-        {isEdit ? (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">제목</label>
-              <input
-                type="text"
-                value={formData.videoTitle || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, videoTitle: e.target.value }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">영상 URL</label>
-              <div className="mt-1 relative">
-                <input
-                  type="text"
-                  value={formData.videoUrl || ''}
-                  onChange={handleUrlChange}
-                  placeholder="유튜브 URL을 붙여넣으세요"
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-                <div 
-                  className="mt-2 border-2 border-dashed border-gray-300 rounded-md p-6 text-center hover:border-gray-400 transition-colors"
-                  onDrop={handleDrop}
-                  onDragOver={(e) => e.preventDefault()}
-                >
-                  <div className="space-y-1 text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <div className="flex text-sm text-gray-600 justify-center">
-                      <span>유튜브 영상 URL을 끌어다 놓거나</span>
-                      <label htmlFor="file-upload" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 ml-1">
-                        <span>브라우저에서 복사하세요</span>
-                      </label>
-                    </div>
-                    <p className="text-xs text-gray-500">유튜브 영상 링크 또는 공유 URL</p>
-                  </div>
-                </div>
-              </div>
-              {videoId && (
-                <div className="mt-2">
-                  <img 
-                    src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
-                    alt="YouTube Thumbnail"
-                    className="rounded w-full"
-                  />
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">설명</label>
-              <textarea
-                value={formData.description || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                rows={4}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onToggleEdit}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-              >
-                취소
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                저장
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-medium">{node.data.videoTitle || node.data.label}</h3>
-            </div>
-            {videoId && (
-              <div className="aspect-video w-full">
-                <iframe
-                  width="100%"
-                  height="100%"
-                  src={`https://www.youtube.com/embed/${videoId}`}
-                  title="YouTube video player"
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                ></iframe>
-              </div>
-            )}
-            {node.data.description && (
-              <p className="text-gray-600 whitespace-pre-wrap">{node.data.description}</p>
-            )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <button className="flex items-center gap-1 text-gray-600 hover:text-red-500">
-                  <span>❤️</span>
-                  <span>{node.data.likes || 0}</span>
-                </button>
-                <button className="text-gray-600 hover:text-blue-500">
-                  💬 {node.data.comments?.length || 0}
-                </button>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={onToggleEdit}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  수정
-                </button>
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                >
-                  닫기
-                </button>
-              </div>
-            </div>
-            {node.data.comments && node.data.comments.length > 0 && (
-              <div className="border-t pt-4 mt-4">
-                <h4 className="font-medium mb-2">댓글</h4>
-                <div className="space-y-2">
-                  {node.data.comments.map(comment => (
-                    <div key={comment.id} className="bg-gray-50 p-2 rounded">
-                      <div className="flex justify-between text-sm">
-                        <span className="font-medium">{comment.author}</span>
-                        <span className="text-gray-500">{comment.createdAt}</span>
-                      </div>
-                      <p className="text-sm mt-1">{comment.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {!isEdit && (
-              <div className="border-t pt-4 mt-4">
-                <h4 className="font-medium mb-2">댓글 작성</h4>
-                <div className="space-y-2">
-                  <textarea
-                    placeholder="댓글을 입력하세요..."
-                    className="w-full border rounded p-2"
-                    rows={2}
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                  />
-                  <button 
-                    onClick={handleAddComment}
-                    className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                  >
-                    댓글 작성
-                  </button>
-                </div>
-              </div>
-            )}
+    <>
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div
+          className={`bg-white rounded-lg shadow-xl max-h-[90vh] flex flex-col transition-all duration-300 ease-out ${showYoutubeSearch ? 'w-full max-w-6xl' : 'w-full max-w-2xl'}`}
+          onClick={(e) => e.stopPropagation()} // Prevent closing modal when clicking inside
+        >
+          {/* Modal Header */}
+          <div className="flex justify-between items-center p-4 border-b">
+            <h2 className="text-xl font-semibold">Node {isEdit ? 'Editor' : 'Details'}</h2>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-2xl" aria-label="Close modal">×</button>
           </div>
-        )}
-      </div>
-    </div>
+
+          {/* Modal Body */}
+          <div className={`flex-grow overflow-y-auto p-6 ${showYoutubeSearch ? 'flex' : 'block'}`}>
+             {/* Main Content Area */}
+             <div className={`space-y-6 ${showYoutubeSearch ? 'w-1/2 pr-3 border-r' : 'w-full'}`}>
+               {isEdit ? (
+                 /* --- EDIT MODE --- */
+                 <form onSubmit={handleSubmit} className="space-y-5">
+                   {/* Title Input */}
+                   <div>
+                     <label htmlFor="node-title" className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                     <input
+                       id="node-title"
+                       type="text"
+                       value={formData.label || ''} // Edit label directly
+                       onChange={(e) => setFormData(prev => ({ ...prev, label: e.target.value, videoTitle: e.target.value }))} // Sync label and videoTitle
+                       className="w-full p-2 border border-gray-300 rounded shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                       required
+                     />
+                   </div>
+
+                   {/* YouTube URL Input & Preview */}
+                   <div
+                      className={`p-4 border-2 border-dashed rounded-lg transition-colors ${isDraggingOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
+                      <label htmlFor="youtube-url-input" className="block text-sm font-medium text-gray-700 mb-1">Primary YouTube Video (Optional)</label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          id="youtube-url-input"
+                          type="text"
+                          value={formData.videoUrl || ''}
+                          onChange={handleUrlChange}
+                          placeholder="Paste YouTube URL or drag thumbnail here"
+                          className="flex-grow p-2 border border-gray-300 rounded shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowYoutubeSearch(!showYoutubeSearch)} // Toggle search panel
+                          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition whitespace-nowrap"
+                        >
+                           {showYoutubeSearch ? 'Hide Search' : 'Search YouTube'}
+                        </button>
+                      </div>
+                      {isDraggingOver && <div className="mt-2 text-sm text-blue-600">Drop YouTube thumbnail or link here</div>}
+                      {uploadError && <div className="mt-2 text-sm text-red-600">{uploadError}</div>}
+                      {videoId && (
+                        <div className="mt-3 rounded overflow-hidden border">
+                          <img
+                            src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
+                            alt={`Preview: ${formData.videoTitle || formData.label || 'Video'}`}
+                            className="w-full h-auto object-contain"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+                   </div>
+
+                   {/* Description Textarea */}
+                   <div>
+                     <label htmlFor="node-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                     <textarea
+                       id="node-description"
+                       value={formData.description || ''}
+                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                       className="w-full p-2 border border-gray-300 rounded shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                       rows={4}
+                       placeholder="Add more details about this node..."
+                     />
+                   </div>
+
+                    {/* Multiple Image Upload */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Additional Images</label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleNodeImagesChange}
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+                            disabled={imageUploading}
+                            aria-describedby="image-upload-info"
+                        />
+                        <p id="image-upload-info" className="text-xs text-gray-500 mt-1">Upload multiple images (max 10MB each). Drag thumbnails to reorder.</p>
+                        {imageUploading && <div className="text-sm text-blue-600 mt-1 animate-pulse">Uploading images...</div>}
+                        {uploadError && <div className="mt-1 text-sm text-red-600 whitespace-pre-wrap">{uploadError.includes('Image') && uploadError}</div>} {/* Show image specific errors */}
+                        {formData.mediaImages && formData.mediaImages.length > 0 && (
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, 'images')}>
+                                <SortableContext items={formData.mediaImages.map(img => img.url)} strategy={verticalListSortingStrategy}>
+                                    <div className="flex gap-2 mt-2 overflow-x-auto py-2 -mx-1 px-1">
+                                        {formData.mediaImages.map((img, idx) => (
+                                            <SortableImageThumb
+                                                key={img.url}
+                                                id={img.url} // DND requires unique ID
+                                                src={img.url}
+                                                alt={`Node image ${idx + 1}`}
+                                                filename={img.url.substring(img.url.lastIndexOf('/') + 1)}
+                                                onRemove={() => handleRemoveNodeImageAt(idx)}
+                                                onDownload={() => {}} // Browser handles download via <a>
+                                                onShare={() => copyToClipboard(img.url, 'Image')}
+                                            />
+                                        ))}
+                                    </div>
+                                </SortableContext>
+                            </DndContext>
+                        )}
+                    </div>
+
+                    {/* Multiple Video URLs */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Additional Videos (YouTube)</label>
+                      <div className="flex gap-2 mb-2">
+                          <input
+                              type="text"
+                              value={newVideoUrl}
+                              onChange={e => setNewVideoUrl(e.target.value)}
+                              placeholder="Paste YouTube URL and click Add"
+                              className="flex-grow p-2 border border-gray-300 rounded shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                              aria-label="New YouTube URL to add"
+                          />
+                          <button
+                              type="button"
+                              onClick={handleAddNodeVideo}
+                              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition whitespace-nowrap"
+                          >Add</button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Add multiple YouTube video links. Drag thumbnails to reorder.</p>
+                      {uploadError && <div className="mt-1 text-sm text-red-600">{uploadError.includes('video') && uploadError}</div>} {/* Show video specific errors */}
+                      {formData.mediaVideos && formData.mediaVideos.length > 0 && (
+                          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, 'videos')}>
+                              <SortableContext items={formData.mediaVideos.map(vid => vid.url)} strategy={verticalListSortingStrategy}>
+                                  <div className="flex gap-2 mt-2 overflow-x-auto py-2 -mx-1 px-1">
+                                      {formData.mediaVideos.map((vid, idx) => {
+                                          const vidId = getYoutubeID(vid.url);
+                                          return (
+                                              <SortableVideoThumb
+                                                  key={`${vid.url}-${idx}`} // Ensure key uniqueness if URLs might repeat
+                                                  id={vid.url} // DND ID
+                                                  vidId={vidId}
+                                                  alt={`Node video thumbnail ${idx + 1}`}
+                                                  filename={vidId ? `YT: ${vidId}` : 'Invalid Link'}
+                                                  onRemove={() => handleRemoveNodeVideoAt(idx)}
+                                                  onOpen={() => { if (vidId) window.open(`https://www.youtube.com/watch?v=${vidId}`, '_blank'); }}
+                                                  onShare={() => copyToClipboard(vid.url, 'Video')}
+                                              />
+                                          );
+                                      })}
+                                  </div>
+                              </SortableContext>
+                          </DndContext>
+                      )}
+                    </div>
+
+                    {/* Form Actions */}
+                    <div className="flex justify-end gap-3 pt-3 border-t">
+                      <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">Cancel</button>
+                      <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Save Changes</button>
+                    </div>
+                 </form>
+               ) : (
+                 /* --- VIEW MODE --- */
+                 <div className="space-y-4">
+                   {/* Title */}
+                   <h3 className="text-lg font-semibold">{node.data.videoTitle || node.data.label}</h3>
+
+                   {/* Primary YouTube Video */}
+                   {videoId && (
+                     <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden shadow">
+                       <iframe
+                         src={`https://www.youtube.com/embed/${videoId}`}
+                         title="Node YouTube Video"
+                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                         referrerPolicy="strict-origin-when-cross-origin"
+                         allowFullScreen
+                         className="w-full h-full border-0"
+                       />
+                     </div>
+                   )}
+
+                   {/* Description */}
+                   {node.data.description && (
+                     <p className="text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded border">{node.data.description}</p>
+                   )}
+
+                   {/* Additional Images */}
+                    {node.data.mediaImages && node.data.mediaImages.length > 0 && (
+                        <div>
+                            <h4 className="text-sm font-medium text-gray-600 mb-1">Images</h4>
+                            <div className="flex gap-2 overflow-x-auto py-2 -mx-1 px-1">
+                                {node.data.mediaImages.map((img, idx) => (
+                                     <div key={img.url} className="relative w-24 h-24 flex-shrink-0 cursor-pointer" onClick={() => handleMediaClick('image', img.url)}>
+                                         <img src={img.url} alt={`Node ${node.id} image ${idx + 1}`} className="w-full h-full object-cover rounded border" loading="lazy" />
+                                         <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 transition flex items-center justify-center text-white text-xl">+</div>
+                                     </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Additional Videos */}
+                    {node.data.mediaVideos && node.data.mediaVideos.length > 0 && (
+                         <div>
+                            <h4 className="text-sm font-medium text-gray-600 mb-1">Videos</h4>
+                             <div className="flex gap-2 overflow-x-auto py-2 -mx-1 px-1">
+                                {node.data.mediaVideos.map((vid, idx) => {
+                                    const vidId = getYoutubeID(vid.url);
+                                    return (
+                                         <div key={`${vid.url}-${idx}`} className="relative w-40 h-24 flex-shrink-0 cursor-pointer" onClick={() => vidId && handleMediaClick('video', `https://www.youtube.com/embed/${vidId}`)}>
+                                              {vidId ? (
+                                                 <img src={`https://img.youtube.com/vi/${vidId}/mqdefault.jpg`} alt={`Node ${node.id} video ${idx + 1}`} className="w-full h-full object-cover rounded border" loading="lazy" />
+                                              ) : (
+                                                  <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded border text-xs text-gray-400 p-2 text-center">Invalid Link</div>
+                                              )}
+                                             <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 transition flex items-center justify-center text-white text-xl">▶</div>
+                                         </div>
+                                    );
+                                })}
+                             </div>
+                         </div>
+                     )}
+
+
+                   {/* Likes and Comments Count */}
+                   <div className="flex items-center justify-between border-t pt-4">
+                     <div className="flex items-center gap-4">
+                       <button className="flex items-center gap-1 text-gray-600 hover:text-red-500 transition">
+                         <span>❤️</span>
+                         <span>{node.data.likes || 0}</span>
+                       </button>
+                       <span className="text-gray-600">
+                         💬 {node.data.comments?.length || 0}
+                       </span>
+                     </div>
+                     {user && ( // Only show edit button if user is logged in (add permission checks if needed)
+                         <button onClick={onToggleEdit} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">Edit Node</button>
+                     )}
+                   </div>
+
+                   {/* Comments Section */}
+                   <div className="border-t pt-4">
+                     <h4 className="font-semibold mb-3">Comments</h4>
+                     {/* Existing Comments */}
+                     <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-2">
+                       {(!node.data.comments || node.data.comments.length === 0) && <p className="text-sm text-gray-500">No comments yet.</p>}
+                       {node.data.comments?.map(comment => (
+                         <div key={comment.id} className="bg-gray-50 p-3 rounded shadow-sm text-sm">
+                           <div className="flex justify-between items-center mb-1">
+                             <span className="font-medium text-gray-800">{comment.author}</span>
+                             <span className="text-xs text-gray-500">{new Date(comment.createdAt).toLocaleString()}</span>
+                           </div>
+                           <p className="text-gray-700">{comment.text}</p>
+                         </div>
+                       ))}
+                     </div>
+                     {/* Add Comment Form */}
+                     {user && ( // Only show comment form if user is logged in
+                         <div className="space-y-2">
+                         <textarea
+                             placeholder="Add a comment..."
+                             className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                             rows={2}
+                             value={newComment}
+                             onChange={(e) => setNewComment(e.target.value)}
+                             aria-label="New comment input"
+                         />
+                         <button
+                             onClick={handleAddComment}
+                             disabled={!newComment.trim()}
+                             className="px-4 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400 transition"
+                         >
+                             Post Comment
+                         </button>
+                         </div>
+                     )}
+                   </div>
+                 </div>
+               )}
+             </div>
+
+             {/* YouTube Search Panel (Conditional) */}
+             {showYoutubeSearch && (
+               <div className="w-1/2 pl-3 overflow-y-auto">
+                 <YoutubeSearch
+                   onSelect={async (url, title, description) => {
+                     const vidId = getYoutubeID(url);
+                     setFormData(prev => ({
+                       ...prev,
+                       videoUrl: url,
+                       // Update title/desc only if they weren't manually set or are empty
+                       videoTitle: prev.videoTitle || title || (vidId ? `Video ${vidId}` : 'Selected Video'),
+                       label: prev.label || title || (vidId ? `Video ${vidId}` : 'Selected Video'),
+                       description: prev.description || description,
+                     }));
+                     if (vidId) {
+                        setVideoId(vidId);
+                     }
+                     setShowYoutubeSearch(false); // Close search after selection
+                   }}
+                   onClose={() => setShowYoutubeSearch(false)}
+                 />
+               </div>
+             )}
+          </div> {/* End Modal Body */}
+        </div> {/* End Modal Content */}
+      </div> {/* End Modal Backdrop */}
+
+       {/* Media Viewer Modal */}
+       <Modal isOpen={mediaModalOpen} onClose={() => setMediaModalOpen(false)} size="xl">
+         {mediaModalContent?.type === 'image' && mediaModalContent.url && (
+           <img src={mediaModalContent.url} alt="Enlarged node content" className="max-w-full max-h-[80vh] mx-auto rounded" loading="lazy" />
+         )}
+         {mediaModalContent?.type === 'video' && mediaModalContent.url && (
+           <div className="aspect-w-16 aspect-h-9">
+               <iframe
+                 src={mediaModalContent.url} // Expecting embed URL here
+                 title="Node Video Content"
+                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                 referrerPolicy="strict-origin-when-cross-origin"
+                 allowFullScreen
+                 className="w-full h-full border-0 rounded"
+               />
+           </div>
+         )}
+       </Modal>
+    </>
   );
 };
+NodeDetailModal.displayName = 'NodeDetailModal';
 
-const nodeTypes = {
-  default: CustomNode,
-};
+// --- Main TreeEdit Component ---
 
 const TreeEdit = () => {
-  const { id } = useParams();
+  const { treeId } = useParams<{ treeId: string }>();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const { currentTree, loading, error } = useSelector((state: RootState) => state.trees);
-  
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const dispatch: AppDispatch = useDispatch(); // Use AppDispatch type
+  const reactFlowWrapper = useRef<HTMLDivElement>(null); // Ref for ReactFlow container
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
-  const [showNodeDetail, setShowNodeDetail] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [lastClickTime, setLastClickTime] = useState(0);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [saveTimeoutId, setSaveTimeoutId] = useState<NodeJS.Timeout | null>(null);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(false);
 
+  // Selectors
+  const { currentTree: tree, loading: status, error } = useSelector((state: RootState) => state.trees);
+  const storedNodes = tree?.nodes ?? [];
+  const storedEdges = tree?.edges ?? [];
+  const user = useSelector(selectUser); // Get current user
+
+  // React Flow States
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Modal States
+  const [selectedNode, setSelectedNode] = useState<Node<NodeData> | null>(null);
+  const [isModalEditMode, setIsModalEditMode] = useState(false);
+
+  // Node Types Memoization
+  const nodeTypes = React.useMemo(() => ({ custom: CustomNode }), []);
+
+  // Fetch Tree Data Effect
   useEffect(() => {
-    if (id) {
-      dispatch(fetchTreeById(id) as any);
-    }
-  }, [dispatch, id]);
-
-  useEffect(() => {
-    if (currentTree?.nodes && currentTree?.edges) {
-      const nodesWithDefaults = currentTree.nodes.map(node => ({
-        ...node,
-        type: 'default'
-      }));
-      setNodes(nodesWithDefaults);
-      setEdges(currentTree.edges);
-    }
-  }, [currentTree, setNodes, setEdges]);
-
-  // 자동 저장 토글 함수
-  const toggleAutoSave = useCallback(() => {
-    setAutoSaveEnabled(prev => !prev);
-    if (!autoSaveEnabled) {
-      setAutoSaveStatus('자동 저장이 활성화되었습니다');
-      setTimeout(() => setAutoSaveStatus(null), 3000);
+    if (!treeId) {
+      alert("트리 ID가 없습니다. 메인 페이지로 이동합니다.");
+      navigate("/home");
     } else {
-      setAutoSaveStatus('자동 저장이 비활성화되었습니다');
-      setTimeout(() => setAutoSaveStatus(null), 3000);
+      dispatch(fetchTreeById(treeId));
     }
-  }, [autoSaveEnabled]);
+  }, [treeId, dispatch, navigate]);
 
-  // 자동 저장 기능 (조건부 활성화)
+  // Update React Flow when Redux store changes
   useEffect(() => {
-    if (autoSaveEnabled && id && nodes.length > 0 && !isEditing) {
-      // 기존 타이머가 있으면 취소
-      if (saveTimeoutId) {
-        clearTimeout(saveTimeoutId);
-      }
-      
-      // 새 타이머 설정 (30초 지연)
-      const timerId = setTimeout(() => {
-        handleSave();
-      }, 30000); // 30초로 늘림
-      
-      setSaveTimeoutId(timerId);
-      
-      return () => {
-        if (timerId) clearTimeout(timerId);
-      };
+    if (tree && storedNodes && storedEdges) {
+       // Map stored nodes/edges to React Flow format if needed
+       // Ensure position is included
+       const flowNodes = storedNodes.map((n: Node<NodeData>) => ({
+            ...n,
+            position: n.position || { x: Math.random() * 400, y: Math.random() * 400 }, // Provide default position if missing
+            type: 'custom', // Use custom node type
+            data: { ...n.data } // Ensure data is copied properly
+        })) as Node<NodeData>[]; // Type assertion
+
+       setNodes(flowNodes);
+       setEdges(storedEdges as Edge[]); // Assuming storedEdges are already in React Flow format
     }
-  }, [nodes, edges, id, isEditing, autoSaveEnabled]);
+  }, [tree, storedNodes, storedEdges, setNodes, setEdges]); // Dependencies
 
-  // 노드 변경 이벤트 처리 수정
-  const handleNodesChange = useCallback((changes: any) => {
-    setIsEditing(true); // 편집 시작
-    onNodesChange(changes);
-    
-    // 편집 완료 타이머 설정
-    setTimeout(() => {
-      setIsEditing(false);
-    }, 1000); // 편집 후 1초 동안은 저장하지 않음
-  }, [onNodesChange]);
 
-  // 엣지 변경 이벤트 처리 수정
-  const handleEdgesChange = useCallback((changes: any) => {
-    setIsEditing(true); // 편집 시작
-    onEdgesChange(changes);
-    
-    // 편집 완료 타이머 설정
-    setTimeout(() => {
-      setIsEditing(false);
-    }, 1000); // 편집 후 1초 동안은 저장하지 않음
-  }, [onEdgesChange]);
+  // Handler for connecting nodes
+  const onConnect = useCallback(
+    (connection: Connection | Edge) => {
+      // Add specific handle IDs to the connection object if needed, React Flow does this automatically if IDs match
+      console.log("Connection created:", connection);
+      setEdges((eds) => addEdge({ ...connection, animated: true, style: { stroke: '#555' } }, eds));
+    },
+    [setEdges]
+  );
 
-  // 연결 이벤트 처리 수정
-  const onConnect = useCallback((params: Connection) => {
-    setIsEditing(true);
-    
-    // 연결선 스타일 개선
-    setEdges((eds) => addEdge({
-      ...params,
-      type: 'smoothstep',
-      animated: false,
-      style: { 
-        strokeWidth: 3,
-        stroke: '#666',
-      },
-      markerEnd: undefined
-    }, eds));
-    
-    setTimeout(() => {
-      setIsEditing(false);
-    }, 1000);
-  }, [setEdges]);
-
-  // 저장 함수 수정
-  const handleSave = async () => {
-    if (!id || isEditing) return; // 편집 중이면 저장하지 않음
-    
-    setIsSaving(true);
-    setAutoSaveStatus('저장 중...');
-    try {
-      await dispatch(updateTreeNodes({ treeId: id, nodes, edges }) as any);
-      setAutoSaveStatus('저장 완료');
-      // 3초 후 상태 메시지 제거
-      setTimeout(() => setAutoSaveStatus(null), 3000);
-    } catch (err) {
-      console.error('트리 저장 실패:', err);
-      setAutoSaveStatus('저장 실패');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
+  // Handler for clicking a node (open modal in view mode)
   const onNodeClick: NodeMouseHandler = useCallback((event, node) => {
-    event.preventDefault();
-    const currentTime = new Date().getTime();
-    const timeDiff = currentTime - lastClickTime;
-
-    if (timeDiff < 300) { // 더블 클릭 감지
-      setSelectedNode(node);
-      setShowNodeDetail(true);
-      // 노드에 videoUrl이 없는 경우에만 편집 모드로 시작
-      setIsEditMode(!node.data.videoUrl);
-    } else {
-      setSelectedNode(node);
-      setSelectedEdge(null);
-    }
-
-    setLastClickTime(currentTime);
-  }, [lastClickTime]);
-
-  const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
-    event.preventDefault();
-    setSelectedEdge(edge);
-    setSelectedNode(null);
+    console.log('Node clicked:', node);
+    setSelectedNode(node as Node<NodeData>); // Type assertion
+    setIsModalEditMode(false); // Default to view mode on click
   }, []);
 
-  const onPaneClick = useCallback((event: React.MouseEvent) => {
-    // 모달이 열려있고, 실제로 pane을 클릭했을 때만 모달 닫기
-    if (showNodeDetail && (event.target as HTMLElement).classList.contains('react-flow__pane')) {
-      setSelectedNode(null);
-      setSelectedEdge(null);
-      setShowNodeDetail(false);
-      setIsEditMode(false);
-    }
-  }, [showNodeDetail]);
+   // Handler for double clicking a node (open modal in edit mode)
+   const onNodeDoubleClick: NodeMouseHandler = useCallback((event, node) => {
+     console.log('Node double clicked:', node);
+     setSelectedNode(node as Node<NodeData>); // Type assertion
+     setIsModalEditMode(true); // Open in edit mode on double click
+   }, []);
 
-  const addNewNode = useCallback((position: { x: number, y: number }) => {
-    const newNode: Node<NodeData> = {
-      id: `node-${Date.now()}`,
-      position,
-      data: { label: `노드 ${nodes.length + 1}` },
-      type: 'default'
-    };
-    setNodes((nds) => [...nds, newNode]);
-  }, [nodes.length, setNodes]);
-
-  const onPaneMouseDown = useCallback(() => {
-    setIsDragging(true);
-    document.body.classList.add('react-flow-grabbing');
-  }, []);
-
-  const onPaneMouseUp = useCallback(() => {
-    setIsDragging(false);
-    document.body.classList.remove('react-flow-grabbing');
-  }, []);
-
-  const onDoubleClick = useCallback((event: React.MouseEvent) => {
-    // 더블클릭이 빈 공간에서 발생했는지 확인
-    if ((event.target as HTMLElement).classList.contains('react-flow__pane')) {
-      if (!reactFlowInstance) return;
-      
-      // ReactFlow 요소의 경계 정보 가져오기
-      const reactFlowBounds = document.querySelector('.react-flow')?.getBoundingClientRect();
-      if (!reactFlowBounds) return;
-      
-      // 뷰포트 정보 가져오기
-      const { zoom } = reactFlowInstance.getViewport();
-      
-      // 실제 마우스 클릭 위치 계산
-      const position = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY
-      });
-      
-      // 새 노드 생성
-      const newNode = {
-        id: `node-${Date.now()}`,
-        position,
-        data: { label: `노드 ${nodes.length + 1}` },
-        type: 'default'
-      };
-      
-      setNodes((nds) => [...nds, newNode]);
-    }
-  }, [reactFlowInstance, nodes.length, setNodes]);
-
-  const handleNodeDataSave = useCallback((data: NodeData) => {
-    if (!selectedNode) return;
-
-    setNodes(nds => nds.map(node => {
-      if (node.id === selectedNode.id) {
-        return {
-          ...node,
-          data: {
-            ...data,
-            label: data.videoTitle || node.data.label
-          }
-        };
-      }
-      return node;
-    }));
-  }, [selectedNode, setNodes]);
-
-  const deleteSelectedNode = useCallback(() => {
-    if (selectedNode) {
-      setNodes(nodes.filter(n => n.id !== selectedNode.id));
-      setEdges(edges.filter(e => e.source !== selectedNode.id && e.target !== selectedNode.id));
-      setSelectedNode(null);
-    }
-  }, [selectedNode, nodes, edges, setNodes, setEdges]);
-
-  const deleteSelectedEdge = useCallback(() => {
-    if (selectedEdge) {
-      setEdges(edges.filter(e => e.id !== selectedEdge.id));
-      setSelectedEdge(null);
-    }
-  }, [selectedEdge, edges, setEdges]);
-
-  const addNodeAtCenter = useCallback(() => {
-    if (!reactFlowInstance) return;
-    
-    const { x, y, zoom } = reactFlowInstance.getViewport();
-    addNewNode({ x: x + window.innerWidth / (2 * zoom), y: y + window.innerHeight / (2 * zoom) });
-  }, [reactFlowInstance, addNewNode]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNode) {
-        event.preventDefault();
-        setNodes(nodes => nodes.filter(n => n.id !== selectedNode.id));
-        setEdges(edges => edges.filter(e => e.source !== selectedNode.id && e.target !== selectedNode.id));
+  // Save Node Data from Modal
+  const handleSaveNodeData = useCallback(
+    (nodeId: string, data: NodeData) => {
+        console.log('Saving node data:', nodeId, data);
+        setNodes((nds) =>
+            nds.map((n) => (n.id === nodeId ? { ...n, data: data } : n))
+        );
+        // Close modal after saving
         setSelectedNode(null);
+        setIsModalEditMode(false);
+
+        // Optionally: Dispatch update to backend/Redux immediately
+        // dispatch(updateTreeNode({ treeId, nodeId, data })); // Define this action if needed
+         dispatch(addNotification({ _id: Date.now().toString(), message: `Node "${data.label}" updated.`, type: 'success' }));
+
+    },
+    [setNodes, dispatch] // removed treeId dependency as it's not directly used here, but might be needed for dispatch
+  );
+
+
+  // Save Tree Layout and Data
+  const onSaveTree = useCallback(() => {
+    if (!treeId || !reactFlowInstance) {
+        console.error("Cannot save: Missing treeId or React Flow instance.");
+        dispatch(addNotification({ _id: Date.now().toString(), message: 'Error: Cannot save tree.', type: 'error' }));
+        return;
+    }
+     // Get current nodes and edges from React Flow state (important!)
+     const currentNodes = reactFlowInstance.getNodes();
+     const currentEdges = reactFlowInstance.getEdges();
+
+    console.log('Saving tree with ID:', treeId);
+    console.log('Nodes to save:', currentNodes);
+    console.log('Edges to save:', currentEdges);
+
+     // Prepare nodes data for backend (remove internal React Flow properties if necessary)
+     const nodesToSave = currentNodes.map(({ id, type, data, position, width, height }) => ({
+         id,
+         type, // Keep type if your backend uses it
+         data,
+         position,
+         // Optionally include dimensions if your backend stores them
+         // width,
+         // height,
+     }));
+
+
+    // Dispatch action to update the entire tree structure in Redux/backend
+     dispatch(updateTree({
+         treeId,
+         data: {
+           nodes: nodesToSave,
+           edges: currentEdges,
+           // name: tree?.name,
+           // description: tree?.description
+         }
+     }))
+     .unwrap() // Use unwrap to handle async thunk promise result
+     .then(() => {
+         dispatch(addNotification({ _id: Date.now().toString(), message: 'Tree saved successfully!', type: 'success' }));
+     })
+     .catch((saveError) => {
+         console.error("Failed to save tree:", saveError);
+         dispatch(addNotification({ _id: Date.now().toString(), message: `Failed to save tree: ${saveError.message || 'Unknown error'}`, type: 'error' }));
+     });
+
+  }, [treeId, reactFlowInstance, dispatch]); // Add reactFlowInstance and dispatch
+
+  // Add a new node function
+  const onAddNode = useCallback(async () => {
+    if (!treeId) {
+      console.error('Tree ID is missing!');
+      return;
+    }
+    try {
+      // 백엔드에 노드 생성 요청
+      const response = await fetch(`/api/trees/${treeId}/nodes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          label: 'New Node',
+          videoTitle: 'New Node',
+          description: '',
+          likes: 0,
+          comments: [],
+          author: user ? { _id: user._id, name: user.name, profileImage: user.profileImage } : undefined,
+          mediaImages: [],
+          mediaVideos: []
+        })
+      });
+      if (!response.ok) {
+        throw new Error('노드 생성 실패');
       }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNode, setNodes, setEdges]);
+      const newNode = await response.json();
+      setNodes((nds) => nds.concat(newNode));
+      // 필요하다면 setSelectedNode(newNode); 등으로 바로 편집 모달 열기
+    } catch (error) {
+      console.error('노드 생성 실패:', error);
+    }
+  }, [treeId, setNodes, user]);
 
-  // 문서 레벨 드롭 이벤트 핸들러
-  useEffect(() => {
-    const handleDocumentDrop = (e: DragEvent) => {
-      e.preventDefault();
-      
-      const reactFlowEl = document.querySelector('.react-flow');
-      if (!reactFlowEl || !reactFlowInstance) return;
-      
-      const reactFlowBounds = reactFlowEl.getBoundingClientRect();
-      const isWithinReactFlow = 
-        e.clientX >= reactFlowBounds.left && 
-        e.clientX <= reactFlowBounds.right && 
-        e.clientY >= reactFlowBounds.top && 
-        e.clientY <= reactFlowBounds.bottom;
-      
-      if (isWithinReactFlow) {
-        const position = reactFlowInstance.screenToFlowPosition({
-          x: e.clientX,
-          y: e.clientY
-        });
-        
-        const url = e.dataTransfer?.getData('text');
-        if (url) {
-          const videoId = getYoutubeID(url);
-          if (videoId) {
-            const newNode = {
-              id: `node-${Date.now()}`,
-              position,
-              data: { 
-                label: `Video ${nodes.length + 1}`,
-                videoUrl: `https://www.youtube.com/watch?v=${videoId}`
-              },
-              type: 'default'
-            };
-            
-            setNodes((nds) => [...nds, newNode]);
-            
-            fetchYoutubeMetadata(videoId).then(metadata => {
-              if (metadata) {
-                setNodes(nds => nds.map(n => {
-                  if (n.id === newNode.id) {
-                    return {
-                      ...n,
-                      data: {
-                        ...n.data,
-                        videoTitle: metadata.title,
-                        description: metadata.description
-                      }
-                    };
-                  }
-                  return n;
-                }));
-              }
-            });
-          }
-        }
-      }
-    };
-    
-    document.addEventListener('drop', handleDocumentDrop);
-    document.addEventListener('dragover', e => e.preventDefault());
-    
-    return () => {
-      document.removeEventListener('drop', handleDocumentDrop);
-      document.removeEventListener('dragover', e => e.preventDefault());
-    };
-  }, [reactFlowInstance, nodes.length, setNodes]);
+   // Override default nodes change handler to log changes (optional)
+   const handleNodesChange = useCallback((changes: NodeChange[]) => {
+     // console.log("Node Changes:", changes);
+     onNodesChange(changes);
+   }, [onNodesChange]);
 
-  if (loading === 'pending') {
-    return (
-      <div className="h-screen flex justify-center items-center">
-        <div className="text-gray-600">로딩 중...</div>
-      </div>
-    );
-  }
+   // Override default edges change handler to log changes (optional)
+   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+     // console.log("Edge Changes:", changes);
+     onEdgesChange(changes);
+   }, [onEdgesChange]);
 
-  if (error) {
-    return (
-      <div className="h-screen flex justify-center items-center">
-        <div className="text-red-600">에러: {error}</div>
-      </div>
-    );
-  }
+
+  if (status === 'pending') return <div className="p-4 text-center">Loading tree...</div>;
+  if (status === 'failed') return <div className="p-4 text-center text-red-500">Error loading tree: {error}</div>;
+  if (!tree) return <div className="p-4 text-center">Tree not found.</div>; // Handle case where tree is null after loading attempt
 
   return (
-    <div className="h-screen flex flex-col">
-      <div className="p-4 bg-white border-b flex justify-between items-center">
-        <div>
-          <h1 className="text-xl font-bold">{currentTree?.title || '트리 편집'}</h1>
-        </div>
-        <div className="flex gap-2 items-center">
-          <button
-            onClick={toggleAutoSave}
-            className={`px-2 py-2 rounded-full flex items-center ${
-              autoSaveEnabled ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'
-            }`}
-            title={autoSaveEnabled ? "자동 저장 활성화됨" : "자동 저장 비활성화됨"}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              {autoSaveEnabled ? (
-                // 열린 자물쇠 아이콘
-                <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" />
-              ) : (
-                // 닫힌 자물쇠 아이콘
-                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-              )}
-            </svg>
-          </button>
-          
-          {autoSaveEnabled && (
-            <span className="text-xs text-gray-500 mr-2">자동 저장 중</span>
-          )}
-          
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-          >
-            {isSaving ? '저장 중...' : '변경사항 저장'}
-          </button>
-          
-          <button
-            onClick={() => navigate(`/trees/${id}`)}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-          >
-            취소
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 relative">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={onNodeClick}
-          onEdgeClick={onEdgeClick}
-          onPaneClick={onPaneClick}
-          onDoubleClick={onDoubleClick}
-          onPaneMouseDown={onPaneMouseDown}
-          onPaneMouseUp={onPaneMouseUp}
-          onInit={setReactFlowInstance}
-          nodeTypes={nodeTypes}
-          fitView
-          connectionMode={ConnectionMode.Loose}
-          connectionLineStyle={{ 
-            stroke: '#666',
-            strokeWidth: 3,
-            strokeDasharray: 'none'
-          }}
-          defaultEdgeOptions={{
-            type: 'smoothstep',
-            animated: false,
-            style: { 
-              stroke: '#666',
-              strokeWidth: 3,
-              strokeDasharray: 'none'
-            }
-          }}
-          zoomOnDoubleClick={false}
-          panOnDrag={true}
-          className="react-flow"
-          style={{ cursor: isDragging ? 'grabbing' : 'default' }}
-        >
-          <Background />
-          <Controls />
-          <Panel position="top-left" style={{ background: 'white', padding: '10px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-            <div className="text-sm space-y-2">
-              <div className="font-medium mb-2">도구</div>
-              <div className="space-y-1">
-                <button
-                  onClick={addNodeAtCenter}
-                  className="w-full px-3 py-1 text-left hover:bg-gray-100 rounded flex items-center gap-2"
-                >
-                  <span className="text-blue-500">+</span> 새 노드 추가
-                </button>
-                {selectedNode && (
-                  <button
-                    onClick={deleteSelectedNode}
-                    className="w-full px-3 py-1 text-left hover:bg-gray-100 rounded flex items-center gap-2 text-red-500"
-                  >
-                    <span>×</span> 선택한 노드 삭제
-                  </button>
-                )}
-                {selectedEdge && (
-                  <button
-                    onClick={deleteSelectedEdge}
-                    className="w-full px-3 py-1 text-left hover:bg-gray-100 rounded flex items-center gap-2 text-red-500"
-                  >
-                    <span>×</span> 선택한 연결선 삭제
-                  </button>
-                )}
-              </div>
-              <div className="border-t pt-2 mt-2">
-                <div className="text-xs text-gray-500 mb-1">조작 방법</div>
-                <p>• 더블 클릭: 새 노드 추가</p>
-                <p>• 클릭: 노드/연결선 선택</p>
-                <p>• 노드 더블 클릭: 내용 보기/편집</p>
-                <p>• Delete: 선택한 항목 삭제</p>
-                <p>• 드래그: 화면 이동</p>
-                <p>• 노드 드래그: 노드 이동</p>
-                <p>• 노드 연결: 드래그 앤 드롭</p>
-              </div>
-            </div>
-          </Panel>
-        </ReactFlow>
-        {autoSaveStatus && (
-          <div className="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg opacity-75">
-            {autoSaveStatus}
+    <div className="tree-edit-container h-[calc(100vh-60px)] p-2 sm:p-4 w-full max-w-full overflow-x-auto">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
+        onInit={setReactFlowInstance}
+        nodeTypes={nodeTypes}
+        connectionMode={ConnectionMode.Loose}
+        fitView
+        fitViewOptions={{ padding: 0.2 }}
+        deleteKeyCode={['Backspace', 'Delete']}
+        className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg min-w-0"
+      >
+        <Background color="#aaa" gap={16} />
+        <Controls />
+        <Panel position="top-right">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 p-2 bg-white rounded-lg shadow min-w-0">
+            <button
+              onClick={onAddNode}
+              className="w-full sm:w-auto py-2 px-4 text-base bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+              title="Add a new node to the canvas"
+            >
+              Add Node
+            </button>
+            <button
+              onClick={onSaveTree}
+              className="w-full sm:w-auto py-2 px-4 text-base bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+              title="Save the current tree layout and node data"
+            >
+              Save Tree
+            </button>
+            <button
+              onClick={() => navigate(`/trees/${treeId}`)}
+              className="w-full sm:w-auto py-2 px-4 text-base bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
+              title="Exit editor and view the tree"
+            >
+              View Tree
+            </button>
           </div>
-        )}
-        {showNodeDetail && selectedNode && (
-          <NodeDetailModal
-            node={selectedNode}
-            onClose={() => {
-              setShowNodeDetail(false);
-              setIsEditMode(false);
-            }}
-            onSave={handleNodeDataSave}
-            isEdit={isEditMode}
-            onToggleEdit={() => setIsEditMode(!isEditMode)}
-          />
-        )}
-      </div>
+        </Panel>
+      </ReactFlow>
+
+      {/* Node Detail Modal */}
+      {selectedNode && (
+        <NodeDetailModal
+          node={selectedNode}
+          onClose={() => setSelectedNode(null)}
+          onSave={handleSaveNodeData}
+          isEdit={isModalEditMode}
+          onToggleEdit={() => setIsModalEditMode((prev) => !prev)}
+        />
+      )}
     </div>
   );
 };
 
-export default TreeEdit; 
+// --- Export Default ---
+// This MUST be at the end of the file
+export default TreeEdit;

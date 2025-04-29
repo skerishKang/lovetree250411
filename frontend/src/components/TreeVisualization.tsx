@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { RootState } from '../store';
-import { TreeNode, DragItem } from '../types/tree';
+import { TreeNode as TreeNodeType, DragItem } from '../types/tree';
 import { fetchUserTree, deleteNode, updateNode } from '../features/tree/treeSlice';
 import TreeNodeForm from './TreeNodeForm';
 import { TreeStyleCustomizer, TreeStyle, defaultStyle } from './TreeStyleCustomizer';
@@ -15,14 +15,14 @@ interface TreeVisualizationProps {
 }
 
 const DraggableNode: React.FC<{
-  node: TreeNode;
+  node: TreeNodeType;
   level: number;
   style: TreeStyle;
   searchTerm: string;
   zoomLevel: number;
   layout: TreeLayout;
-  onSelect: (node: TreeNode) => void;
-  onEdit: (node: TreeNode) => void;
+  onSelect: (node: TreeNodeType) => void;
+  onEdit: (node: TreeNodeType) => void;
   onDelete: (nodeId: string) => void;
   onDrop: (item: DragItem, parentId?: string) => void;
   onToggleExpand: (nodeId: string) => void;
@@ -43,7 +43,7 @@ const DraggableNode: React.FC<{
     type: 'node',
     item: { type: 'node', id: node._id, parentId: node.parent },
     collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
+      isDragging: !!monitor.isDragging(),
     }),
   });
 
@@ -55,7 +55,7 @@ const DraggableNode: React.FC<{
       }
     },
     collect: (monitor) => ({
-      isOver: monitor.isOver(),
+      isOver: !!monitor.isOver(),
     }),
   });
 
@@ -64,6 +64,12 @@ const DraggableNode: React.FC<{
     (node.description && node.description.includes(searchTerm)) ||
     (node.tags && node.tags.some(tag => tag.includes(searchTerm)))
   );
+
+  const stageColorMap = {
+    'tree': style.stageColors.폴인럽 || '#4CAF50',
+    'seed': style.stageColors.썸 || '#FFC107',
+    'sprout': style.stageColors.입덕 || '#2196F3',
+  };
 
   const nodeStyle = {
     ...(layout === 'vertical' 
@@ -110,7 +116,7 @@ const DraggableNode: React.FC<{
   };
 
   const stageStyle = {
-    backgroundColor: style.stageColors[node.stage],
+    backgroundColor: node.stage ? stageColorMap[node.stage] : '#ccc',
     padding: `${2 * zoomLevel}px ${6 * zoomLevel}px`,
     borderRadius: `${4 * zoomLevel}px`,
     fontSize: `${style.fontSizes.tag * zoomLevel}px`,
@@ -125,7 +131,7 @@ const DraggableNode: React.FC<{
         <div className="flex justify-between items-start">
           <div onClick={() => onSelect(node)}>
             <div style={titleStyle}>{node.content}</div>
-            <div style={stageStyle}>{node.stage}</div>
+            {node.stage && <div style={stageStyle}>{node.stage}</div>}
           </div>
           <div className="flex space-x-2">
             {node.children && node.children.length > 0 && (
@@ -187,54 +193,65 @@ const DraggableNode: React.FC<{
           ))}
         </div>
       </div>
-      {node.expanded && node.children?.map(child => (
-        <DraggableNode
-          key={child._id}
-          node={child}
-          level={level + 1}
-          style={style}
-          searchTerm={searchTerm}
-          zoomLevel={zoomLevel}
-          layout={layout}
-          onSelect={onSelect}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onDrop={onDrop}
-          onToggleExpand={onToggleExpand}
-        />
-      ))}
+      {node.expanded && node.children?.map(childId => {
+        // childId가 문자열인 경우, 상태에서 해당 노드 찾기
+        const child = typeof childId === 'string' 
+          ? nodesWithIds[childId] 
+          : childId;
+          
+        return child ? (
+          <DraggableNode
+            key={typeof child === 'string' ? child : child._id}
+            node={typeof child === 'string' ? nodesWithIds[child] : child}
+            level={level + 1}
+            style={style}
+            searchTerm={searchTerm}
+            zoomLevel={zoomLevel}
+            layout={layout}
+            onSelect={onSelect}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onDrop={onDrop}
+            onToggleExpand={onToggleExpand}
+          />
+        ) : null;
+      })}
     </div>
   );
 };
 
 const TreeVisualization: React.FC<TreeVisualizationProps> = ({ userId }) => {
-  const dispatch = useDispatch();
-  const { nodes, status } = useSelector((state: RootState) => state.tree);
-  const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [parentId, setParentId] = useState<string | undefined>();
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
-  const [showStyleCustomizer, setShowStyleCustomizer] = useState(false);
-  const [treeStyle, setTreeStyle] = useState<TreeStyle>(defaultStyle);
+  const dispatch = useDispatch<any>();
+  const { nodes, status } = useSelector((state: RootState) => state.trees);
+  
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedNode, setSelectedNode] = useState<TreeNodeType | null>(null);
+  const [formMode, setFormMode] = useState<'add' | 'edit' | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [treeLayout, setTreeLayout] = useState<TreeLayout>('vertical');
-
+  const [layout, setLayout] = useState<TreeLayout>('vertical');
+  const [treeStyle, setTreeStyle] = useState<TreeStyle>(defaultStyle);
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
+  
+  // 노드 ID로 빠르게 접근하기 위한 맵 생성
+  const nodesWithIds: Record<string, TreeNodeType> = {};
+  nodes.forEach(node => {
+    nodesWithIds[node._id] = node;
+  });
+  
   useEffect(() => {
-    dispatch(fetchUserTree(userId));
+    if (userId) {
+      dispatch(fetchUserTree(userId));
+    }
   }, [dispatch, userId]);
 
   const handleCreateNode = (parentId?: string) => {
-    setFormMode('create');
-    setParentId(parentId);
-    setShowForm(true);
+    setFormMode('add');
+    setSelectedNode(parentId ? nodesWithIds[parentId] : null);
   };
 
-  const handleEditNode = (node: TreeNode) => {
+  const handleEditNode = (node: TreeNodeType) => {
     setFormMode('edit');
     setSelectedNode(node);
-    setShowForm(true);
   };
 
   const handleDeleteNode = async (nodeId: string) => {
@@ -244,29 +261,36 @@ const TreeVisualization: React.FC<TreeVisualizationProps> = ({ userId }) => {
   };
 
   const handleDrop = async (item: DragItem, newParentId?: string) => {
-    if (item.id && newParentId !== item.parentId) {
+    if (item.parentId !== newParentId) {
       await dispatch(updateNode({
-        id: item.id,
-        nodeData: { parent: newParentId }
+        nodeId: item.id,
+        data: { parent: newParentId }
       }));
     }
   };
 
   const handleToggleExpand = (nodeId: string) => {
-    setExpandedNodes(prev => ({
-      ...prev,
-      [nodeId]: !prev[nodeId]
-    }));
+    setExpandedNodeIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
   };
 
-  const getNodeWithExpanded = (node: TreeNode): TreeNode => {
+  // 확장 상태를 포함한 노드 구조 생성
+  const getNodeWithExpanded = (node: TreeNodeType): TreeNodeType => {
     return {
       ...node,
-      expanded: expandedNodes[node._id],
-      children: node.children?.map(getNodeWithExpanded)
+      expanded: expandedNodeIds.has(node._id),
+      children: node.children || []
     };
   };
 
+  // 확장 상태가 포함된 노드 목록
   const nodesWithExpanded = nodes.map(getNodeWithExpanded);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -274,124 +298,108 @@ const TreeVisualization: React.FC<TreeVisualizationProps> = ({ userId }) => {
   };
 
   const handleZoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setZoomLevel(Number(e.target.value));
+    setZoomLevel(parseFloat(e.target.value));
   };
 
   const handleLayoutChange = () => {
-    setTreeLayout(prev => prev === 'vertical' ? 'horizontal' : 'vertical');
+    setLayout(prev => prev === 'vertical' ? 'horizontal' : 'vertical');
   };
 
   if (status === 'loading') {
     return <div>로딩 중...</div>;
   }
 
-  if (status === 'failed') {
-    return <div>트리를 불러오는데 실패했습니다.</div>;
+  if (status === 'error') {
+    return <div>에러가 발생했습니다. 다시 시도해주세요.</div>;
   }
 
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="p-4">
-        <div className="mb-4 flex justify-between items-center">
-          <h2 className="text-2xl font-bold">나의 러브 트리</h2>
-          <div className="flex space-x-2 items-center">
-            <div className="flex items-center space-x-2">
-              <label className="text-sm">확대/축소:</label>
-              <input
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value={zoomLevel}
-                onChange={handleZoomChange}
-                className="w-32"
-              />
-              <span className="text-sm">{Math.round(zoomLevel * 100)}%</span>
-            </div>
-            <button
-              onClick={handleLayoutChange}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-            >
-              {treeLayout === 'vertical' ? '수평 레이아웃' : '수직 레이아웃'}
-            </button>
+        <div className="mb-4 flex flex-wrap gap-4 items-center">
+          <button
+            onClick={() => handleCreateNode()}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            루트 노드 추가
+          </button>
+          <div>
+            <label htmlFor="search" className="mr-2">검색:</label>
             <input
+              id="search"
               type="text"
-              placeholder="검색어 입력"
               value={searchTerm}
               onChange={handleSearch}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border px-2 py-1 rounded"
+              placeholder="검색어 입력..."
             />
-            <button
-              onClick={() => setShowStyleCustomizer(!showStyleCustomizer)}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
-            >
-              {showStyleCustomizer ? '스타일 설정 닫기' : '스타일 설정'}
-            </button>
-            <button
-              onClick={() => handleCreateNode()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              새 노드 생성
-            </button>
           </div>
+          <div>
+            <label htmlFor="zoom" className="mr-2">확대/축소:</label>
+            <input
+              id="zoom"
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value={zoomLevel}
+              onChange={handleZoomChange}
+              className="w-32"
+            />
+            <span className="ml-2">{zoomLevel.toFixed(1)}x</span>
+          </div>
+          <button
+            onClick={handleLayoutChange}
+            className="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
+          >
+            {layout === 'vertical' ? '가로 배치로 변경' : '세로 배치로 변경'}
+          </button>
+          <TreeStyleCustomizer
+            style={treeStyle}
+            onChange={setTreeStyle}
+          />
         </div>
-
-        <div 
-          className="flex gap-4"
-          style={{ 
-            flexDirection: treeLayout === 'vertical' ? 'column' : 'row',
-            overflowX: treeLayout === 'horizontal' ? 'auto' : 'visible',
-            overflowY: treeLayout === 'horizontal' ? 'visible' : 'auto'
-          }}
-        >
-          <div className={`${showStyleCustomizer ? 'w-3/4' : 'w-full'}`}>
-            <div 
-              className="space-y-4"
-              style={{ 
-                display: treeLayout === 'vertical' ? 'block' : 'flex',
-                flexWrap: treeLayout === 'horizontal' ? 'nowrap' : 'wrap'
-              }}
-            >
-              {nodesWithExpanded.map(node => (
-                <DraggableNode
-                  key={node._id}
-                  node={node}
-                  level={0}
-                  style={treeStyle}
-                  searchTerm={searchTerm}
-                  zoomLevel={zoomLevel}
-                  layout={treeLayout}
-                  onSelect={setSelectedNode}
-                  onEdit={handleEditNode}
-                  onDelete={handleDeleteNode}
-                  onDrop={handleDrop}
-                  onToggleExpand={handleToggleExpand}
-                />
-              ))}
-            </div>
-          </div>
-          
-          {showStyleCustomizer && (
-            <div className="w-1/4">
-              <TreeStyleCustomizer
-                style={treeStyle}
-                onChange={setTreeStyle}
+        
+        <div className={`tree-visualization ${layout === 'horizontal' ? 'flex' : 'block'}`}>
+          {nodesWithExpanded.map(node => (
+            <DraggableNode
+              key={node._id}
+              node={node}
+              level={0}
+              style={treeStyle}
+              searchTerm={searchTerm}
+              zoomLevel={zoomLevel}
+              layout={layout}
+              onSelect={() => handleCreateNode(node._id)}
+              onEdit={handleEditNode}
+              onDelete={handleDeleteNode}
+              onDrop={handleDrop}
+              onToggleExpand={handleToggleExpand}
+            />
+          ))}
+        </div>
+        
+        {formMode && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="bg-white p-6 rounded-lg max-w-xl w-full">
+              <h2 className="text-xl mb-4">
+                {formMode === 'add' 
+                  ? selectedNode 
+                    ? `'${selectedNode.content}' 노드 아래에 추가` 
+                    : '루트 노드 추가' 
+                  : '노드 편집'
+                }
+              </h2>
+              <TreeNodeForm
+                node={formMode === 'edit' ? selectedNode : undefined}
+                parentId={formMode === 'add' && selectedNode ? selectedNode._id : undefined}
+                onCancel={() => {
+                  setFormMode(null);
+                  setSelectedNode(null);
+                }}
               />
             </div>
-          )}
-        </div>
-
-        {showForm && (
-          <TreeNodeForm
-            userId={userId}
-            parentId={formMode === 'create' ? parentId : undefined}
-            node={formMode === 'edit' ? selectedNode : undefined}
-            onClose={() => {
-              setShowForm(false);
-              setSelectedNode(null);
-              setParentId(undefined);
-            }}
-          />
+          </div>
         )}
       </div>
     </DndProvider>

@@ -1,27 +1,72 @@
+console.log('1. 서버 시작');
 require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+console.log('2. dotenv 로드');
 const express = require('express');
+console.log('3. express 로드');
 const mongoose = require('mongoose');
+console.log('4. mongoose 로드');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
-const authRoutes = require('./routes/authRoutes');
-const postRoutes = require('./routes/postRoutes');
-const chatRoutes = require('./routes/chatRoutes');
-const commentRoutes = require('./routes/commentRoutes');
-const auth = require('./middleware/auth');
+const axios = require('axios');
 const path = require('path');
 const logger = require('./utils/logger');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const passport = require('passport');
 const ports = require('./config/ports');
+const { init: initSocket } = require('./config/socket');
+const websocketManager = require('./utils/websocket');
+console.log('5. 의존성 및 유틸 로드 완료');
+
+// 라우트 임포트
+console.log('5-1. authRoutes require 시도');
+// const authRoutes = require('./routes/authRoutes');
+console.log('5-2. postRoutes require 시도');
+// const postRoutes = require('./routes/postRoutes');
+console.log('5-3. chatRoutes require 시도');
+// const chatRoutes = require('./routes/chatRoutes');
+console.log('5-4. commentRoutes require 시도');
+// const commentRoutes = require('./routes/commentRoutes');
+console.log('5-5. auth require 시도');
+// const auth = require('./middleware/auth');
+console.log('5-6. treesRoutes require 시도');
 const treesRoutes = require('./routes/trees');
+console.log('5-7. profileRoutes require 시도');
+const profileRoutes = require('./routes/profileRoutes');
+console.log('5-8. googleAuthRoutes require 시도');
+// const googleAuthRoutes = require('./routes/googleAuthRoutes');
+console.log('5-9. notificationRoutes require 시도');
+// const notificationRoutes = require('./routes/notificationRoutes');
+console.log('5-10. userRoutes require 시도');
+// const userRoutes = require('./routes/userRoutes');
+console.log('5-11. followRoutes require 시도');
+// const followRoutes = require('./routes/followRoutes');
+console.log('6. 라우트 임포트 완료');
+
+// ngrok 포워딩 URL을 동적으로 가져오는 함수
+async function getNgrokUrl() {
+  try {
+    const response = await axios.get('http://127.0.0.1:4040/api/tunnels');
+    const publicUrl = response.data.tunnels[0]?.public_url;
+    return publicUrl;
+  } catch (error) {
+    logger.error("ngrok URL을 가져오는 데 실패했습니다:", error);
+    return null;
+  }
+}
 
 const startTime = Date.now();
 logger.info('서버 초기화 시작', {
   timestamp: new Date().toISOString(),
   nodeEnv: process.env.NODE_ENV || 'development',
   pid: process.pid
+});
+
+// Passport 설정
+require('./config/passport');
+logger.info('Passport 설정 완료', {
+  timestamp: new Date().toISOString()
 });
 
 const app = express();
@@ -32,9 +77,15 @@ const urls = ports.getUrls();
 
 // CORS 설정
 const corsOptions = {
-  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'https://*.ngrok-free.app',
+    'https://*.ngrok.io'
+  ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
@@ -42,9 +93,18 @@ app.use(cors(corsOptions));
 
 // WebSocket 설정
 const io = socketIo(server, {
-  cors: corsOptions,
+  cors: {
+    origin: corsOptions.origin,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  },
   transports: ['websocket', 'polling']
 });
+
+// WebSocket 관리자 초기화
+websocketManager.initialize(server);
+app.set('io', io);
 
 logger.info('미들웨어 설정', {
   timestamp: new Date().toISOString(),
@@ -54,222 +114,138 @@ logger.info('미들웨어 설정', {
 });
 
 // 미들웨어
-app.use(helmet());
+// app.use(helmet({
+//   contentSecurityPolicy: {
+//     directives: {
+//       defaultSrc: ["'self'"],
+//       styleSrc: ["'self'", "'unsafe-inline'"],
+//       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.youtube.com"],
+//       frameSrc: ["'self'", "*.youtube.com", "*.youtu.be"],
+//       imgSrc: ["'self'", "data:", "*.ytimg.com"]
+//     }
+//   }
+// }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// 요청 제한 설정
-const limiter = rateLimit({
-  windowMs: process.env.RATE_LIMIT_WINDOW_MS || 900000,
-  max: process.env.RATE_LIMIT_MAX || 100
-});
-app.use(limiter);
-
-// Passport 설정
-require('./config/passport');
 app.use(passport.initialize());
-
-// 요청 로깅 미들웨어
-app.use((req, res, next) => {
-  const requestStart = Date.now();
-  logger.info('요청 수신', {
-    timestamp: new Date().toISOString(),
-    method: req.method,
-    path: req.path,
-    ip: req.ip,
-    userAgent: req.get('user-agent')
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// app.use(limiter);
+// app.use((req, res, next) => {
+//   ...
+// });
+app.get('/api/config', (req, res) => {
+  res.json({
+    apiUrl: 'http://localhost:8080',
+    wsUrl: 'ws://localhost:8080',
+    version: '1.0.0',
+    env: process.env.NODE_ENV || 'development'
   });
-
-  res.on('finish', () => {
-    const duration = Date.now() - requestStart;
-    logger.info('응답 전송', {
-      timestamp: new Date().toISOString(),
-      method: req.method,
-      path: req.path,
-      statusCode: res.statusCode,
-      duration: `${duration}ms`
-    });
-  });
-
-  next();
 });
+app.use('/api/profile', profileRoutes);
+// app.get('/', (req, res) => {
+//   ...
+// });
+// app.use((err, req, res, next) => {
+//   ...
+// });
 
-logger.info('라우트 설정', {
-  timestamp: new Date().toISOString(),
-  routes: [
-    { path: '/api/auth', auth: false },
-    { path: '/api/posts', auth: true },
-    { path: '/api/chat', auth: true },
-    { path: '/api/comments', auth: true },
-    { path: '/api/trees', auth: true }
-  ]
-});
-
-// 라우트
-app.use('/api/auth', authRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/chat', auth, chatRoutes);
-app.use('/api/comments', auth, commentRoutes);
+console.log('[진단] 미들웨어/라우트 등록 직전');
+// 미들웨어 및 라우트 등록 코드 전체 주석 처리
+// app.use('/api/auth', authRoutes);
+// app.use('/api/auth', googleAuthRoutes);
+// app.use('/api/posts', postRoutes);
+// app.use('/api/notifications', notificationRoutes);
+// app.use('/api/users', userRoutes);
+// app.use('/api/chat', auth, chatRoutes);
+// app.use('/api/comments', auth, commentRoutes);
 app.use('/api/trees', treesRoutes);
-
-// 프로덕션 환경에서 정적 파일 서빙
-if (process.env.NODE_ENV === 'production') {
-  logger.info('프로덕션 환경 설정', {
+// app.use('/api/follow', followRoutes);
+console.log('[진단] 미들웨어/라우트 등록 이후');
+console.log('[진단] mongoose.connect() 실행 직전');
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => {
+  logger.info('MongoDB 연결 성공', {
     timestamp: new Date().toISOString(),
-    staticPath: path.join(__dirname, '../frontend/dist')
+    dbName: mongoose.connection.name
   });
-  
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  
-  app.get('*', (req, res) => {
-    logger.info('정적 파일 요청', {
-      timestamp: new Date().toISOString(),
-      path: req.path,
-      referer: req.get('referer')
-    });
-    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  console.log('[진단] mongoose.connect() then 진입');
+}).catch(error => {
+  logger.error('MongoDB 연결 실패', {
+    timestamp: new Date().toISOString(),
+    error: error.message
   });
-}
+  console.log('[MongoDB 연결 실패]', error);
+});
+console.log('[진단] mongoose.connect() 실행 이후');
+console.log('[진단] server.listen() 실행 직전');
+const PORT = ports.SERVER || 5000;
+server.listen(PORT, () => {
+  const duration = Date.now() - startTime;
+  logger.info('서버 시작', {
+    timestamp: new Date().toISOString(),
+    port: PORT,
+    duration: `${duration}ms`
+  });
+  console.log(`[진단] 서버가 ${PORT}번 포트에서 실행 중입니다`);
+});
+console.log('[진단] server.listen() 실행 이후');
 
-logger.info('소켓 설정', {
-  timestamp: new Date().toISOString(),
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:3005'
+// Socket.IO 초기화
+initSocket(server);
+logger.info('Socket.IO 초기화 완료', {
+  timestamp: new Date().toISOString()
 });
 
-// 소켓 연결
+// WebSocket 연결 이벤트
 io.on('connection', (socket) => {
-  const connectionTime = new Date().toISOString();
-  logger.info('새로운 클라이언트 연결', {
-    timestamp: connectionTime,
-    socketId: socket.id,
-    handshake: {
-      address: socket.handshake.address,
-      headers: socket.handshake.headers,
-      query: socket.handshake.query
-    }
+  logger.info('WebSocket 클라이언트 연결', {
+    timestamp: new Date().toISOString(),
+    socketId: socket.id
   });
 
-  socket.on('disconnect', (reason) => {
-    const duration = new Date().getTime() - new Date(connectionTime).getTime();
-    logger.info('클라이언트 연결 해제', {
+  socket.on('disconnect', () => {
+    logger.info('WebSocket 클라이언트 연결 해제', {
       timestamp: new Date().toISOString(),
-      socketId: socket.id,
-      reason,
-      connectionDuration: `${duration}ms`
+      socketId: socket.id
     });
-  });
-
-  // 트리 노드 업데이트 이벤트
-  socket.on('updateNode', (data) => {
-    logger.info('트리 노드 업데이트 이벤트', {
-      timestamp: new Date().toISOString(),
-      socketId: socket.id,
-      data
-    });
-    socket.broadcast.emit('nodeUpdated', data);
   });
 });
 
-// 서버 시작 함수
-const startServer = (port) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const serverInstance = server.listen(port, () => {
-        logger.info('서버 시작 완료', {
-          timestamp: new Date().toISOString(),
-          port: port,
-          startupTime: `${Date.now() - startTime}ms`,
-          nodeVersion: process.version,
-          platform: process.platform,
-          memoryUsage: process.memoryUsage()
-        });
-        resolve(serverInstance);
-      });
-
-      serverInstance.on('error', (error) => {
-        if (error.code === 'EADDRINUSE') {
-          logger.error('포트가 이미 사용 중입니다', {
-            timestamp: new Date().toISOString(),
-            port: port,
-            error: error.message
-          });
-          reject(new Error(`포트 ${port}가 이미 사용 중입니다. 다른 프로세스를 종료하고 다시 시도해주세요.`));
-        } else {
-          logger.error('서버 시작 중 에러 발생', {
-            timestamp: new Date().toISOString(),
-            error: error.message
-          });
-          reject(error);
-        }
-      });
-    } catch (error) {
-      reject(error);
-    }
+// 프로세스 종료 시 로깅
+process.on('SIGTERM', () => {
+  logger.info('서버 종료 신호 수신', {
+    timestamp: new Date().toISOString()
   });
-};
-
-// 데이터베이스 연결 및 서버 시작
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000
-  })
-  .then(async () => {
-    logger.info('MongoDB 연결 성공', {
+  server.close(() => {
+    logger.info('서버 종료 완료', {
       timestamp: new Date().toISOString(),
-      connectionTime: `${Date.now() - startTime}ms`
+      uptime: `${process.uptime()}s`
     });
-    
-    try {
-      await startServer(ports.SERVER);
-    } catch (error) {
-      logger.error('서버 시작 실패', {
-        timestamp: new Date().toISOString(),
-        error: error.message
-      });
-      process.exit(1);
-    }
-  })
-  .catch((err) => {
-    logger.error('MongoDB 연결 실패', {
-      timestamp: new Date().toISOString(),
-      error: {
-        name: err.name,
-        message: err.message,
-        stack: err.stack
-      }
-    });
-    process.exit(1);
+    process.exit(0);
   });
+});
 
-// 에러 핸들링
-app.use((err, req, res, next) => {
-  logger.error('서버 에러 발생', {
+process.on('uncaughtException', (err) => {
+  logger.error('처리되지 않은 예외 발생', {
     timestamp: new Date().toISOString(),
     error: {
       message: err.message,
       stack: err.stack,
       name: err.name
-    },
-    request: {
-      path: req.path,
-      method: req.method,
-      query: req.query,
-      body: req.body,
-      headers: req.headers
     }
   });
-  res.status(500).json({
-    error: '서버 에러 발생',
-    message: process.env.NODE_ENV === 'development' ? err.message : '서버 에러가 발생했습니다.'
-  });
+  process.exit(1);
 });
 
-// 프로세스 종료 처리
-process.on('SIGINT', () => {
-  mongoose.connection.close(() => {
-    logger.info('MongoDB 연결 종료');
-    process.exit(0);
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('처리되지 않은 프로미스 거부', {
+    timestamp: new Date().toISOString(),
+    reason: reason instanceof Error ? {
+      message: reason.message,
+      stack: reason.stack,
+      name: reason.name
+    } : reason
   });
-}); 
+});

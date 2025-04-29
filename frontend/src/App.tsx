@@ -1,35 +1,36 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '@/store';
+import { RootState, AppDispatch } from '@/store';
 import { websocketService } from './services/websocketService';
-import Header from './components/Header';
-import Footer from './components/Footer';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Profile from './pages/Profile';
-import CreatePost from './components/CreatePost';
-import ChatPage from './components/ChatPage';
 import Layout from '@components/Layout';
-import TreeView from '@components/TreeNodeDetail';
-import NotFound from '@pages/NotFound';
 import PrivateRoute from '@components/PrivateRoute';
 import { getCurrentUser, setCredentials } from '@features/auth/authSlice';
 import { getToken, clearAuthData } from '@/utils/auth';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import CreateTree from './pages/CreateTree';
-import TreeDetail from './pages/TreeDetail';
-import Trees from './pages/Trees';
-import TreeEdit from './pages/TreeEdit';
+import TreeView from '@components/TreeNodeDetail';
+const TreeDetail = lazy(() => import('./pages/TreeDetail'));
+const Trees = lazy(() => import('./pages/Trees'));
+const TreeEdit = lazy(() => import('./pages/TreeEdit'));
+const TreeRanking = lazy(() => import('./pages/TreeRanking'));
+const NodeRanking = lazy(() => import('./pages/NodeRanking'));
+const CreateTree = lazy(() => import('./pages/CreateTree'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 // Vite 환경에 맞는 개발 모드 체크
 const isDevelopment = import.meta.env.MODE === 'development';
 
+const Home = lazy(() => import('./pages/Home'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Profile = lazy(() => import('./pages/Profile'));
+const CreatePost = lazy(() => import('./components/CreatePost'));
+const ChatPage = lazy(() => import('./components/ChatPage'));
+
 const App: React.FC = () => {
-  const dispatch = useDispatch();
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+  const dispatch: AppDispatch = useDispatch();
+  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
     const token = getToken();
@@ -67,7 +68,7 @@ const App: React.FC = () => {
   }, [dispatch]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && user && user._id) {
       dispatch(getCurrentUser());
       websocketService.connect();
     }
@@ -75,7 +76,7 @@ const App: React.FC = () => {
     return () => {
       websocketService.disconnect();
     };
-  }, [dispatch, isAuthenticated]);
+  }, [dispatch, isAuthenticated, user]);
 
   return (
     <Layout>
@@ -90,23 +91,21 @@ const App: React.FC = () => {
         draggable
         pauseOnHover
       />
-      <Header />
-      <main className="flex-grow">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-          <Route path="/create-post" element={<PrivateRoute><CreatePost /></PrivateRoute>} />
-          <Route path="/chat" element={<PrivateRoute><ChatPage /></PrivateRoute>} />
-          <Route path="/trees" element={<PrivateRoute><Trees /></PrivateRoute>} />
-          <Route path="/trees/create" element={<PrivateRoute><CreateTree /></PrivateRoute>} />
-          <Route path="/trees/:id" element={<PrivateRoute><TreeDetail /></PrivateRoute>} />
-          <Route path="/trees/:id/edit" element={<PrivateRoute><TreeEdit /></PrivateRoute>} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </main>
-      <Footer />
+      <Routes>
+        <Route path="/" element={<Suspense fallback={<div>로딩 중...</div>}><Home /></Suspense>} />
+        <Route path="/login" element={<Suspense fallback={<div>로딩 중...</div>}><Login /></Suspense>} />
+        <Route path="/register" element={<Suspense fallback={<div>로딩 중...</div>}><Register /></Suspense>} />
+        <Route path="/profile" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><Profile /></Suspense></PrivateRoute>} />
+        <Route path="/create-post" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><CreatePost /></Suspense></PrivateRoute>} />
+        <Route path="/chat" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><ChatPage /></Suspense></PrivateRoute>} />
+        <Route path="/trees" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><Trees /></Suspense></PrivateRoute>} />
+        <Route path="/trees/create" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><CreateTree /></Suspense></PrivateRoute>} />
+        <Route path="/trees/:id" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><TreeDetail /></Suspense></PrivateRoute>} />
+        <Route path="/trees/:id/edit" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><TreeEdit /></Suspense></PrivateRoute>} />
+        <Route path="/trees/rank" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><TreeRanking /></Suspense></PrivateRoute>} />
+        <Route path="/nodes/rank" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><NodeRanking /></Suspense></PrivateRoute>} />
+        <Route path="*" element={<Suspense fallback={<div>로딩 중...</div>}><NotFound /></Suspense>} />
+      </Routes>
     </Layout>
   );
 };

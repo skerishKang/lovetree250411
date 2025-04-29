@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../features/store';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '../store';
 import ChatList from './ChatList';
 import Chat from './Chat';
 import axios from 'axios';

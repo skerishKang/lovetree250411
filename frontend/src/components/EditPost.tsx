@@ -99,6 +99,7 @@ const EditPost: React.FC<EditPostProps> = ({ post, onClose }) => {
                 src={previewUrl}
                 alt="미리보기"
                 className="w-full rounded-lg"
+                loading="lazy"
               />
               <button
                 type="button"

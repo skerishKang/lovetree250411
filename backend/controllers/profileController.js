@@ -1,3 +1,5 @@
+console.log('profileController: 정상 진입');
+
 const User = require('../models/User');
 const path = require('path');
 const fs = require('fs');
@@ -90,18 +92,16 @@ exports.updateProfile = async (req, res) => {
     }
 
     // 이메일 중복 체크
-    if (email && email !== user.email) {
-      const emailExists = await User.findOne({ email });
-      if (emailExists) {
-        logger.warn('프로필 수정 실패 - 이메일 중복', {
-          timestamp: new Date().toISOString(),
-          userId: req.user._id,
-          username: req.user.name,
-          email,
-          queryTime: `${Date.now() - startTime}ms`
-        });
-        return res.status(400).json({ message: '이미 사용 중인 이메일입니다.' });
-      }
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
+      logger.warn('프로필 수정 실패 - 이메일 중복', {
+        timestamp: new Date().toISOString(),
+        userId: req.user._id,
+        username: req.user.name,
+        email,
+        queryTime: `${Date.now() - startTime}ms`
+      });
+      return res.status(400).json({ message: '이미 사용 중인 이메일입니다.' });
     }
 
     // 프로필 이미지 업로드 처리

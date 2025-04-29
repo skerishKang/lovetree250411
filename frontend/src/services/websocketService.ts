@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { store } from '../features/store';
+import { store } from '../store';
 import { connectionEstablished, connectionLost } from '../features/websocket/websocketSlice';
 import { addNotification } from '../features/notifications/notificationsSlice';
 import { addMessage, setOnlineUsers, addOnlineUser, removeOnlineUser } from '../features/chat/chatSlice';

@@ -7,8 +7,8 @@ import SearchBar from '@/components/SearchBar';
 import Loading from '@/components/Loading';
 
 const Home = () => {
-  const dispatch = useDispatch();
-  const { nodes, loading, error } = useSelector((state: RootState) => state.tree);
+  const dispatch = useDispatch<any>();
+  const { nodes, loading, error } = useSelector((state: RootState) => state.trees);
 
   useEffect(() => {
     dispatch(fetchNodes({}));

@@ -5,7 +5,10 @@ const {
   followUser,
   unfollowUser,
   getFollowers,
-  getFollowing
+  getFollowing,
+  addFollow,
+  removeFollow,
+  getFollowCount
 } = require('../controllers/followController');
 const logger = require('../utils/logger');
 
@@ -53,5 +56,17 @@ router.get('/:userId/followers', logRequest, getFollowers);
 
 // 팔로잉 목록 조회
 router.get('/:userId/following', logRequest, getFollowing);
+
+// 팔로우 추가
+router.post('/', auth, addFollow);
+
+// 팔로우 취소
+router.delete('/', auth, removeFollow);
+
+// 특정 대상의 팔로우 수 조회
+router.get('/count', getFollowCount);
+
+// 특정 대상의 팔로워 목록 조회
+router.get('/', getFollowers);
 
 module.exports = router; 

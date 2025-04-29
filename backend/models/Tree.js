@@ -20,6 +20,18 @@ const TreeSchema = new Schema({
     type: Boolean,
     default: false
   },
+  tags: [{
+    type: String,
+    trim: true
+  }],
+  media: [{
+    type: String,
+    trim: true
+  }],
+  thumbUrl: {
+    type: String,
+    default: ''
+  },
   collaborators: [{
     type: Schema.Types.ObjectId,
     ref: 'User'

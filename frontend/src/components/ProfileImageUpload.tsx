@@ -50,6 +50,7 @@ const ProfileImageUpload = ({ currentImage, onImageUpdate }: ProfileImageUploadP
           src={preview || currentImage || 'https://via.placeholder.com/150'}
           alt="프로필"
           className="w-32 h-32 rounded-full object-cover"
+          loading="lazy"
         />
         <button
           onClick={() => fileInputRef.current?.click()}

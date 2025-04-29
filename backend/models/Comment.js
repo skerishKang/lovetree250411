@@ -15,6 +15,15 @@ const commentSchema = new mongoose.Schema({
   post: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Post',
+    required: false
+  },
+  targetType: {
+    type: String,
+    enum: ['Post', 'Tree', 'TreeNode'],
+    required: true
+  },
+  targetId: {
+    type: mongoose.Schema.Types.ObjectId,
     required: true
   },
   createdAt: {

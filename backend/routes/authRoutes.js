@@ -1,3 +1,4 @@
+console.log('[진단] authRoutes.js 진입');
 const express = require('express');
 const router = express.Router();
 const { register, login, getMe } = require('../controllers/authController');
@@ -36,4 +37,9 @@ router.post('/register', logRequest, register);
 router.post('/login', logRequest, login);
 router.get('/me', protect, logRequest, getMe);
 
-module.exports = router; 
+// 헬스 체크 엔드포인트
+router.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+module.exports = router;

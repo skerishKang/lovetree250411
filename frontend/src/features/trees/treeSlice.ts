@@ -1,14 +1,23 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
+import { getApiUrl } from '@/utils/apiConfig';
 
-// API 인스턴스 설정
-const api = axios.create({
-  baseURL: 'http://localhost:3001/api',  // 프록시 대신 직접 백엔드 URL 사용
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-});
+// API 인스턴스 설정 함수 (동적 URL 사용)
+const createApiInstance = () => {
+  const baseURL = `${getApiUrl()}/api`;
+  console.log('🌐 동적 API URL 설정:', baseURL);
+  
+  return axios.create({
+    baseURL,
+    withCredentials: true,
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
+// API 인스턴스 생성
+const api = createApiInstance();
 
 // 요청 인터셉터로 토큰 추가
 api.interceptors.request.use(
@@ -118,6 +127,14 @@ export const updateTreeNodes = createAsyncThunk(
   }
 );
 
+export const updateTree = createAsyncThunk(
+  'trees/updateTree',
+  async ({ treeId, data }: { treeId: string; data: Partial<Tree> }) => {
+    const response = await api.put(`/trees/${treeId}`, data);
+    return response.data;
+  }
+);
+
 interface Tree {
   id: string;
   title: string;
@@ -130,6 +147,10 @@ interface Tree {
   };
   createdAt: string;
   updatedAt: string;
+  isPublic?: boolean;
+  tags?: string[];
+  likes?: string[];
+  followers?: string[];
 }
 
 interface TreeState {
@@ -223,9 +244,20 @@ const treeSlice = createSlice({
       .addCase(updateTreeNodes.rejected, (state, action) => {
         state.loading = 'failed';
         state.error = action.payload as string;
+      })
+      .addCase(updateTree.pending, (state) => {
+        state.loading = 'pending';
+      })
+      .addCase(updateTree.fulfilled, (state, action) => {
+        state.loading = 'succeeded';
+        state.currentTree = action.payload;
+      })
+      .addCase(updateTree.rejected, (state, action) => {
+        state.loading = 'failed';
+        state.error = action.error.message || '트리 업데이트 실패';
       });
   }
 });
 
 export const { clearError, setCurrentTree } = treeSlice.actions;
-export default treeSlice.reducer; 
+export default treeSlice.reducer;

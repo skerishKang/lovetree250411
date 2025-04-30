@@ -13,10 +13,7 @@ const ports = {
   
   // URL 설정
   getUrls: () => {
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    const localhost = isDevelopment ? 'localhost' : process.env.DOMAIN || 'localhost';
-    
-    // apiConfig에서 동적으로 URL 가져오기
+    // 환경변수 기반으로만 URL 사용
     const apiUrl = getApiUrl();
     const wsUrl = getWsUrl();
     
@@ -28,7 +25,7 @@ const ports = {
       WS: wsUrl,
       
       // 프론트엔드 URL
-      FRONTEND: `http://${localhost}:${ports.FRONTEND}`
+      FRONTEND: window.location.origin
     };
   }
 };

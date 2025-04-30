@@ -9,8 +9,10 @@ interface ApiConfig {
 
 // 기본 API 설정값
 let apiConfig: ApiConfig = {
-  apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:8080',
-  wsUrl: import.meta.env.VITE_WS_URL || 'ws://localhost:8080',
+  apiUrl: import.meta.env.VITE_API_URL,
+  wsUrl: import.meta.env.VITE_WS_URL || (window.location.protocol === 'https:'
+    ? 'wss://' + window.location.host
+    : 'ws://' + window.location.host),
 };
 
 // 설정이 초기화되었는지 확인하는 플래그
@@ -45,62 +47,14 @@ export const initApiConfig = async (): Promise<ApiConfig> => {
     return apiConfig;
   }
 
-  try {
-    // 먼저 로컬 스토리지에서 설정 로드
-    const savedConfig = loadApiConfig();
-    if (savedConfig) {
-      apiConfig = savedConfig;
-      console.log('🔄 저장된 API 설정 로드됨:', apiConfig);
-    }
-
-    // 백엔드 서버에서 최신 설정 가져오기
-    console.log('🔍 백엔드 서버에서 API 설정 가져오는 중...');
-    
-    // 여러 기본 URL을 시도
-    const urlsToTry = [
-      apiConfig.apiUrl,
-      'http://localhost:8080'
-    ];
-    
-    let configLoaded = false;
-    
-    for (const url of urlsToTry) {
-      if (configLoaded) break;
-      
-      try {
-        console.log(`🔍 API 설정 요청 시도: ${url}/api/config`);
-        const response = await axios.get<ApiConfig>(`${url}/api/config`, {
-          timeout: 3000,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.data?.apiUrl) {
-          apiConfig = response.data;
-          console.log('✅ 새 API 설정 로드됨:', apiConfig);
-          
-          // 로컬 스토리지에 저장
-          saveApiConfig(apiConfig);
-          configLoaded = true;
-          isConfigInitialized = true;
-        }
-      } catch (error) {
-        console.warn(`⚠️ ${url}에서 API 설정 가져오기 실패:`, error);
-      }
-    }
-    
-    if (!configLoaded) {
-      console.warn('⚠️ 모든 URL 시도 실패, 기본 API 설정을 사용합니다:', apiConfig);
-      // 기본 설정이라도 초기화는 완료된 것으로 표시
-      isConfigInitialized = true;
-    }
-  } catch (error) {
-    console.error('❌ API 설정 초기화 중 오류 발생:', error);
-    isConfigInitialized = true; // 에러가 발생해도 초기화 시도는 완료됨
-  }
-  
+  // 환경변수 기반 기본값만 사용 (배포 환경)
+  apiConfig = {
+    apiUrl: import.meta.env.VITE_API_URL,
+    wsUrl: import.meta.env.VITE_WS_URL || (window.location.protocol === 'https:'
+      ? 'wss://' + window.location.host
+      : 'ws://' + window.location.host),
+  };
+  isConfigInitialized = true;
   return apiConfig;
 };
 

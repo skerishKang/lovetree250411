@@ -27,6 +27,11 @@
 - [완료] 아이콘 404 무시, /api/config 제거, 환경변수 기반 API 설정
 - [점검] 백엔드 컨트롤러 응답(res.json), 로그/네트워크/콘솔 에러 실시간 점검
 
+## 7. 중요 변경사항
+- [완료] frontend/src/utils/axios.ts never 타입 오류(linter) 해결, 타입가드(isAxiosError) 및 as AxiosError<ErrorResponse> 단언으로 안전하게 처리
+- [완료] 클로드팀 제안 반영: baseURL(getApiUrl), 토큰/인터셉터/콘솔로그/에러처리 개선, 불필요한 중복 export 제거
+- [완료] 응답 인터셉터에서 401/네트워크/타임아웃 등 에러 처리 및 로그 강화
+
 ---
 
 ## 다음 해야 할 일

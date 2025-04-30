@@ -21,7 +21,7 @@ console.log('5. 의존성 및 유틸 로드 완료');
 
 // 라우트 임포트
 console.log('5-1. authRoutes require 시도');
-// const authRoutes = require('./routes/authRoutes');
+const authRoutes = require('./routes/authRoutes');
 console.log('5-2. postRoutes require 시도');
 // const postRoutes = require('./routes/postRoutes');
 console.log('5-3. chatRoutes require 시도');
@@ -72,24 +72,38 @@ logger.info('Passport 설정 완료', {
 const app = express();
 const server = http.createServer(app);
 
-// URL 설정 가져오기
-const urls = ports.getUrls();
-
-// CORS 설정
+// CORS 설정 (최상단에 위치)
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://c550-49-168-168-61.ngrok-free.app',
+  'https://lovetree250411.netlify.app',
+  'https://lovetree250411.onrender.com'
+];
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    'https://*.ngrok-free.app',
-    'https://*.ngrok.io'
-  ],
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
+  optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
-
 app.use(cors(corsOptions));
+// CORS 헤더 로깅 미들웨어 (최상단)
+app.use((req, res, next) => {
+  const setHeader = res.setHeader;
+  res.setHeader = function(name, value) {
+    if (name.toLowerCase().startsWith('access-control')) {
+      console.log(`[CORS-DEBUG] ${name}: ${value}`);
+    }
+    setHeader.apply(this, arguments);
+  };
+  next();
+});
 
 // WebSocket 설정
 const io = socketIo(server, {
@@ -151,7 +165,7 @@ app.use('/api/profile', profileRoutes);
 
 console.log('[진단] 미들웨어/라우트 등록 직전');
 // 미들웨어 및 라우트 등록 코드 전체 주석 처리
-// app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 // app.use('/api/auth', googleAuthRoutes);
 // app.use('/api/posts', postRoutes);
 // app.use('/api/notifications', notificationRoutes);

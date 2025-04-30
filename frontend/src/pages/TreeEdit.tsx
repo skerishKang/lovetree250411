@@ -1088,7 +1088,7 @@ const TreeEdit = () => {
       x: event.clientX,
       y: event.clientY,
     });
-    console.log('계산된 노드 위치:', position);
+    console.log('계산된 노드 위치(클릭 좌표):', position);
     const newNodeData = {
       label: '노드추가',
       content: '내용을 입력하세요',
@@ -1124,7 +1124,7 @@ const TreeEdit = () => {
         position,
         data: apiResponse.data.data || newNodeData,
       };
-      console.log('[Double Click] setNodes 호출 직전, newNode 객체:', finalNewNode);
+      console.log('setNodes에 들어가는 최종 노드 position:', finalNewNode.position);
       if (!finalNewNode.id) {
         console.error('[Double Click] 오류: 백엔드 응답에서 노드 ID를 찾을 수 없습니다!');
         return;

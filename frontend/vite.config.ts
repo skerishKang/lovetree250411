@@ -52,9 +52,10 @@ export default defineConfig({
       devOptions: {
         enabled: true,
       },
-      srcDir: 'src',
-      filename: 'service-worker.js',
       strategies: 'injectManifest',
+      injectManifest: {
+        swSrc: 'src/service-worker.js',
+      },
       injectRegister: 'auto',
     }),
   ],
@@ -74,13 +75,13 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: process.env.VITE_API_URL || 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path  // 경로를 그대로 유지하도록 변경
       },
       '/socket.io': {
-        target: 'http://localhost:3001',
+        target: process.env.VITE_API_URL || 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
         ws: true,

@@ -17,35 +17,35 @@ const createApiInstance = () => {
 };
 
 // API 인스턴스 생성
-const api = createApiInstance();
+// const api = createApiInstance();
 
 // 요청 인터셉터로 토큰 추가
-api.interceptors.request.use(
-  (config) => {
-    console.log('API 요청 설정:', config);
-    const token = localStorage.getItem('token');
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    console.error('API 요청 인터셉터 에러:', error);
-    return Promise.reject(error);
-  }
-);
+// api.interceptors.request.use(
+//   (config) => {
+//     console.log('API 요청 설정:', config);
+//     const token = localStorage.getItem('token');
+//     if (token && config.headers) {
+//       config.headers.Authorization = `Bearer ${token}`;
+//     }
+//     return config;
+//   },
+//   (error) => {
+//     console.error('API 요청 인터셉터 에러:', error);
+//     return Promise.reject(error);
+//   }
+// );
 
 // 응답 인터셉터 추가
-api.interceptors.response.use(
-  (response) => {
-    console.log('API 응답 데이터:', response.data);
-    return response;
-  },
-  (error) => {
-    console.error('API 응답 에러:', error.response || error);
-    return Promise.reject(error);
-  }
-);
+// api.interceptors.response.use(
+//   (response) => {
+//     console.log('API 응답 데이터:', response.data);
+//     return response;
+//   },
+//   (error) => {
+//     console.error('API 응답 에러:', error.response || error);
+//     return Promise.reject(error);
+//   }
+// );
 
 // 트리 생성
 export const createTree = createAsyncThunk(
@@ -53,6 +53,7 @@ export const createTree = createAsyncThunk(
   async ({ title, description }: { title: string; description: string }, { rejectWithValue }) => {
     try {
       console.log('트리 생성 시도:', { title, description });
+      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.post('/trees', { title, description });
       console.log('트리 생성 성공:', response.data);
       return response.data;
@@ -73,6 +74,7 @@ export const fetchTrees = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('트리 목록 조회 시도');
+      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.get('/trees');
       console.log('트리 목록 조회 성공:', response.data);
       return response.data;
@@ -93,6 +95,7 @@ export const fetchTreeById = createAsyncThunk(
   async (id: string, { rejectWithValue }) => {
     try {
       console.log('트리 상세 조회 시도:', id);
+      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.get(`/trees/${id}`);
       console.log('트리 상세 조회 성공:', response.data);
       return response.data;
@@ -113,6 +116,7 @@ export const updateTreeNodes = createAsyncThunk(
   async ({ treeId, nodes, edges }: { treeId: string; nodes: any[]; edges: any[] }, { rejectWithValue }) => {
     try {
       console.log('노드 업데이트 시도:', { treeId, nodes, edges });
+      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.put(`/trees/${treeId}/nodes`, { nodes, edges });
       console.log('노드 업데이트 성공:', response.data);
       return response.data;
@@ -130,6 +134,7 @@ export const updateTreeNodes = createAsyncThunk(
 export const updateTree = createAsyncThunk(
   'trees/updateTree',
   async ({ treeId, data }: { treeId: string; data: Partial<Tree> }) => {
+    const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
     const response = await api.put(`/trees/${treeId}`, data);
     return response.data;
   }

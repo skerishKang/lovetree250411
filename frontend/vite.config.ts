@@ -1,63 +1,63 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { VitePWA } from 'vite-plugin-pwa';
+// import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   plugins: [
     react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      manifest: {
-        name: 'Love Tree',
-        short_name: 'LoveTree',
-        description: '사람에 빠지는 순간을 간직하는 플랫폼',
-        theme_color: '#16a34a',
-        background_color: '#ffffff',
-        display: 'standalone',
-        icons: [
-          {
-            src: '/icons/icon-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-          },
-          {
-            src: '/icons/icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
-        ],
-        gcm_sender_id: '103953800507',
-      },
-      workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-stylesheets',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-webfonts',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-        ],
-      },
-      devOptions: {
-        enabled: true,
-      },
-      strategies: 'injectManifest',
-      injectManifest: {
-        swSrc: 'src/service-worker.js',
-      },
-      injectRegister: 'auto',
-    }),
+    // VitePWA({
+    //   registerType: 'autoUpdate',
+    //   manifest: {
+    //     name: 'Love Tree',
+    //     short_name: 'LoveTree',
+    //     description: '사람에 빠지는 순간을 간직하는 플랫폼',
+    //     theme_color: '#16a34a',
+    //     background_color: '#ffffff',
+    //     display: 'standalone',
+    //     icons: [
+    //       {
+    //         src: '/icons/icon-192x192.png',
+    //         sizes: '192x192',
+    //         type: 'image/png',
+    //       },
+    //       {
+    //         src: '/icons/icon-512x512.png',
+    //         sizes: '512x512',
+    //         type: 'image/png',
+    //       },
+    //     ],
+    //     gcm_sender_id: '103953800507',
+    //   },
+    //   workbox: {
+    //     runtimeCaching: [
+    //       {
+    //         urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*$/,
+    //         handler: 'CacheFirst',
+    //         options: {
+    //           cacheName: 'google-fonts-stylesheets',
+    //           expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+    //         },
+    //       },
+    //       {
+    //         urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*$/,
+    //         handler: 'CacheFirst',
+    //         options: {
+    //           cacheName: 'google-fonts-webfonts',
+    //           expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+    //         },
+    //       },
+    //     ],
+    //   },
+    //   devOptions: {
+    //     enabled: true,
+    //   },
+    //   strategies: 'injectManifest',
+    //   injectManifest: {
+    //     swSrc: 'src/service-worker.js',
+    //   },
+    //   injectRegister: 'auto',
+    // }),
   ],
   resolve: {
     alias: {

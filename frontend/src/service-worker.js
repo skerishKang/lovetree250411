@@ -46,4 +46,6 @@ self.addEventListener('notificationclick', function(event) {
       })
     );
   }
-}); 
+});
+
+self.__WB_MANIFEST; 

@@ -1,5 +1,6 @@
 const TreeNode = require('../models/treeNode');
 const logger = require('../utils/logger');
+const Tree = require('../models/Tree');
 
 // 트리 노드 생성
 exports.createNode = async (req, res) => {
@@ -343,5 +344,34 @@ exports.addComment = async (req, res) => {
       nodeId: req.params.id
     });
     res.status(400).json({ message: error.message });
+  }
+};
+
+// 최신 트리 목록 가져오기
+exports.getLatestTrees = async (req, res) => {
+  const limit = parseInt(req.query.limit) || 20; // 한 번에 가져올 개수 (기본 20)
+  const page = parseInt(req.query.page) || 1; // 페이지 번호 (기본 1)
+  const skip = (page - 1) * limit;
+
+  try {
+    // 공개된 트리만 가져오기 (isPublic: true)
+    const latestTrees = await Tree.find({ isPublic: true })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      // .populate('author', 'name profileImage') // 필요시 주석 해제
+      .select('title description thumbUrl author createdAt nodes edges');
+
+    const totalTrees = await Tree.countDocuments({ isPublic: true });
+
+    res.status(200).json({
+      trees: latestTrees,
+      currentPage: page,
+      totalPages: Math.ceil(totalTrees / limit),
+      totalTrees: totalTrees
+    });
+  } catch (error) {
+    console.error('[Error] 최신 트리 목록 조회 실패:', error);
+    res.status(500).json({ message: '서버 오류로 최신 트리 목록을 가져오는데 실패했습니다.', error: error.message });
   }
 }; 

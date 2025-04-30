@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '@/api/axios';
 
 const TreeRanking: React.FC = () => {
   const [trees, setTrees] = useState<any[]>([]);
@@ -11,12 +12,10 @@ const TreeRanking: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/trees/rank');
-        if (!res.ok) throw new Error('인기 트리 정보를 불러오지 못했습니다.');
-        const data = await res.json();
-        setTrees(data);
+        const res = await api.get('/trees/rank');
+        setTrees(res.data);
       } catch (err: any) {
-        setError(err.message || '에러가 발생했습니다.');
+        setError(err.response?.data?.message || err.message || '에러가 발생했습니다.');
       } finally {
         setLoading(false);
       }

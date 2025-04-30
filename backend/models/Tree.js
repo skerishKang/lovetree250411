@@ -35,7 +35,15 @@ const TreeSchema = new Schema({
   collaborators: [{
     type: Schema.Types.ObjectId,
     ref: 'User'
-  }]
+  }],
+  nodes: {
+    type: Array,
+    default: []
+  },
+  edges: {
+    type: Array,
+    default: []
+  }
 }, {
   timestamps: true
 });

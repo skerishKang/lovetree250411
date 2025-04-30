@@ -21,15 +21,13 @@ export const handlers = [
   }),
 
   // 트리 노드 목록 조회 API
-  rest.get('/api/trees', (req, res, ctx) => {
+  rest.get('/trees', (req, res, ctx) => {
     return res(
       ctx.status(200),
-      ctx.json({
-        trees: [
-          { id: 1, title: '첫 번째 노드', content: '내용', tags: ['태그1', '태그2'], likes: 5 },
-          { id: 2, title: '두 번째 노드', content: '내용', tags: ['태그3'], likes: 10 }
-        ]
-      })
+      ctx.json([
+        { id: 1, title: '첫 번째 노드', content: '내용', tags: ['태그1', '태그2'], likes: 5 },
+        { id: 2, title: '두 번째 노드', content: '내용', tags: ['태그3'], likes: 10 }
+      ])
     );
   }),
 

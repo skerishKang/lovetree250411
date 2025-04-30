@@ -159,10 +159,12 @@ const notificationsSlice = createSlice({
   initialState,
   reducers: {
     addNotification: (state, action) => {
+      const sender = action.payload.sender;
+      const senderName = sender?.name || sender?.username || '시스템';
       console.log('새 알림 추가:', { 
         notificationId: action.payload._id,
         type: action.payload.type,
-        sender: action.payload.sender.username,
+        sender: senderName,
         postId: action.payload.post?._id,
         timestamp: new Date().toISOString()
       });
@@ -172,16 +174,16 @@ const notificationsSlice = createSlice({
       let msg = '';
       switch (action.payload.type) {
         case 'like':
-          msg = `${action.payload.sender.name || action.payload.sender.username}님이 내 트리를 좋아합니다.`;
+          msg = `${senderName}님이 내 트리를 좋아합니다.`;
           break;
         case 'comment':
-          msg = `${action.payload.sender.name || action.payload.sender.username}님이 내 노드에 댓글을 남겼습니다.`;
+          msg = `${senderName}님이 내 노드에 댓글을 남겼습니다.`;
           break;
         case 'follow':
-          msg = `${action.payload.sender.name || action.payload.sender.username}님이 나를 팔로우하기 시작했습니다.`;
+          msg = `${senderName}님이 나를 팔로우하기 시작했습니다.`;
           break;
         default:
-          msg = '새 알림이 도착했습니다!';
+          msg = action.payload.message || '새 알림이 도착했습니다!';
       }
       toast.info(msg, {
         position: 'bottom-right',

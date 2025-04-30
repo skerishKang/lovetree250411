@@ -2,7 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
 // API 기본 URL 설정
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL + '/api';
 
 // Thunk에서 AbortController signal 처리
 export const fetchPosts = createAsyncThunk(
@@ -14,7 +14,7 @@ export const fetchPosts = createAsyncThunk(
         throw new Error('인증 토큰이 없습니다.');
       }
 
-      const response = await axios.get(`${API_BASE_URL}/api/posts`, {
+      const response = await axios.get(`${API_BASE_URL}/posts`, {
         params: { 
           page, 
           limit,

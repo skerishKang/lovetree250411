@@ -42,13 +42,13 @@ const Header = () => {
               탐색
             </Link>
             <Link
-              to="/trending"
+              to="/popular"
               className="text-gray-600 hover:text-primary transition-colors"
             >
               인기
             </Link>
             <Link
-              to="/recent"
+              to="/latest"
               className="text-gray-600 hover:text-primary transition-colors"
             >
               최신
@@ -135,8 +135,8 @@ const Header = () => {
           <div className="md:hidden bg-white border-t border-gray-200 px-4 py-2 z-50 relative">
             <div className="flex flex-col space-y-2">
               <Link to="/explore" className="py-3 text-lg font-medium text-gray-600 hover:text-primary active:bg-gray-100 rounded transition-colors" onClick={() => setMobileMenuOpen(false)} tabIndex={0}>탐색</Link>
-              <Link to="/trending" className="py-3 text-lg font-medium text-gray-600 hover:text-primary active:bg-gray-100 rounded transition-colors" onClick={() => setMobileMenuOpen(false)} tabIndex={0}>인기</Link>
-              <Link to="/recent" className="py-3 text-lg font-medium text-gray-600 hover:text-primary active:bg-gray-100 rounded transition-colors" onClick={() => setMobileMenuOpen(false)} tabIndex={0}>최신</Link>
+              <Link to="/popular" className="py-3 text-lg font-medium text-gray-600 hover:text-primary active:bg-gray-100 rounded transition-colors" onClick={() => setMobileMenuOpen(false)} tabIndex={0}>인기</Link>
+              <Link to="/latest" className="py-3 text-lg font-medium text-gray-600 hover:text-primary active:bg-gray-100 rounded transition-colors" onClick={() => setMobileMenuOpen(false)} tabIndex={0}>최신</Link>
               <div className="relative py-2">
                 <input
                   type="text"

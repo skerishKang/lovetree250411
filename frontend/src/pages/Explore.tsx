@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '@/api/axios';
 
 const Explore = () => {
   const [activeTab, setActiveTab] = useState<'popular' | 'latest'>('popular');
@@ -11,17 +12,11 @@ const Explore = () => {
     const fetchTrees = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/trees/explore?sort=${activeTab}`);
-        
-        if (!response.ok) {
-          throw new Error('트리 목록을 가져오는데 실패했습니다.');
-        }
-
-        const data = await response.json();
-        setTrees(data);
-      } catch (err) {
+        const response = await api.get(`/trees/explore?sort=${activeTab}`);
+        setTrees(response.data);
+      } catch (err: any) {
         console.error('트리 목록 가져오기 실패:', err);
-        setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
+        setError(err.response?.data?.message || err.message || '알 수 없는 오류가 발생했습니다.');
       } finally {
         setLoading(false);
       }

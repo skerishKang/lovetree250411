@@ -4,7 +4,7 @@ import { getApiUrl } from '@/utils/apiConfig';
 
 // API 인스턴스 설정 함수 (동적 URL 사용)
 const createApiInstance = () => {
-  const baseURL = `${getApiUrl()}/api`;
+  const baseURL = getApiUrl();
   console.log('🌐 동적 API URL 설정:', baseURL);
   
   return axios.create({

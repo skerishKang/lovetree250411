@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback, memo, useRef } from 'react'; // Added useRef
+import React, { useEffect, useState, useCallback, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../store'; // Assuming AppDispatch is defined in store
-import { fetchTreeById, updateTreeNodes, updateTree } from '../features/trees/treeSlice';
+import { fetchTreeById, updateTree } from '../features/trees/treeSlice';
 import ReactFlow, {
   Background,
   Controls,
@@ -18,10 +18,8 @@ import ReactFlow, {
   ConnectionMode,
   Handle,
   Position,
-  NodeChange, // Import NodeChange for better typing
-  EdgeChange, // Import EdgeChange for better typing
-  applyNodeChanges, // Import applyNodeChanges
-  applyEdgeChanges, // Import applyEdgeChanges
+  NodeChange,
+  EdgeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import './TreeEdit.css'; // Make sure this path is correct
@@ -32,6 +30,8 @@ import Modal from '../components/Modal'; // Make sure this path is correct
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'; // Added DragEndEvent
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { getToken } from '../utils/auth';
+import { api } from '@/api/axios';
 
 // TODO: 이 파일의 useSelector 구조와 updateTree 페이로드 구조는
 //       slice/thunk 정의가 바뀌면 반드시 점검/수정할 것!
@@ -68,6 +68,7 @@ interface NodeDetailModalProps {
   onSave: (nodeId: string, data: NodeData) => void; // Pass nodeId for saving
   isEdit: boolean;
   onToggleEdit: () => void;
+  onDelete?: (nodeId: string) => void; // optional로 변경
 }
 
 // --- Helper Functions ---
@@ -124,12 +125,12 @@ const nodeDefaults = {
 const initialNodes: Node<NodeData>[] = []; // Start with empty initial nodes
 const initialEdges: Edge[] = [];
 
-// --- Sub-Components ---
-
 // CustomNode: Renders the node in ReactFlow
 const CustomNode = memo(({ data, id, selected }: { data: NodeData; id: string; selected: boolean }) => {
   const videoUrl = data.videoUrl; // Use only videoUrl
   const videoId = videoUrl ? getYoutubeID(videoUrl) : null;
+  const mainImageUrl = data.mediaImages && data.mediaImages.length > 0 ? data.mediaImages[0].url : (videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null);
+  console.log('[CustomNode]', id, 'Data received:', data, 'Extracted videoId:', videoId, 'Final mainImageUrl:', mainImageUrl);
 
   // Optional: Log rendering for debugging
   // useEffect(() => {
@@ -143,18 +144,14 @@ const CustomNode = memo(({ data, id, selected }: { data: NodeData; id: string; s
       boxShadow: selected ? '0 0 0 2px rgba(59, 130, 246, 0.5)' : nodeDefaults.style.boxShadow,
       position: 'relative',
       padding: '15px',
-      width: videoId ? '220px' : 'auto', // Adjust width based on content
-      minWidth: '150px', // Ensure minimum width
+      width: mainImageUrl ? '220px' : 'auto',
+      minWidth: '150px',
     }}>
-      {/* Handles */}
-      <Handle type="source" position={Position.Top} id={`t-s-${id}`} isConnectable={true} style={{ background: '#555', top: '-5px' }} />
-      <Handle type="target" position={Position.Top} id={`t-t-${id}`} isConnectable={true} style={{ background: '#aaa', top: '-5px', left: 'auto', right: '10px' }} />
-      <Handle type="source" position={Position.Right} id={`r-s-${id}`} isConnectable={true} style={{ background: '#555', right: '-5px' }} />
-      <Handle type="target" position={Position.Right} id={`r-t-${id}`} isConnectable={true} style={{ background: '#aaa', right: '-5px', top: 'auto', bottom: '10px' }} />
-      <Handle type="source" position={Position.Bottom} id={`b-s-${id}`} isConnectable={true} style={{ background: '#555', bottom: '-5px' }} />
-      <Handle type="target" position={Position.Bottom} id={`b-t-${id}`} isConnectable={true} style={{ background: '#aaa', bottom: '-5px', left: 'auto', right: '10px' }} />
-      <Handle type="source" position={Position.Left} id={`l-s-${id}`} isConnectable={true} style={{ background: '#555', left: '-5px' }} />
-      <Handle type="target" position={Position.Left} id={`l-t-${id}`} isConnectable={true} style={{ background: '#aaa', left: '-5px', top: 'auto', bottom: '10px' }} />
+      {/* Handles - 중앙 정렬 */}
+      <Handle type="source" position={Position.Top} id={`t-s-${id}`} isConnectable={true} style={{ background: '#555', top: '-5px', left: '50%', transform: 'translateX(-50%)' }} />
+      <Handle type="target" position={Position.Bottom} id={`b-t-${id}`} isConnectable={true} style={{ background: '#aaa', bottom: '-5px', left: '50%', transform: 'translateX(-50%)' }} />
+      <Handle type="source" position={Position.Left} id={`l-s-${id}`} isConnectable={true} style={{ background: '#555', left: '-5px', top: '50%', transform: 'translateY(-50%)' }} />
+      <Handle type="target" position={Position.Right} id={`r-t-${id}`} isConnectable={true} style={{ background: '#aaa', right: '-5px', top: '50%', transform: 'translateY(-50%)' }} />
 
       {/* Node Content */}
       <div className="flex items-center justify-between mb-1">
@@ -165,24 +162,24 @@ const CustomNode = memo(({ data, id, selected }: { data: NodeData; id: string; s
           </div>
         )}
       </div>
-      {videoId && (
-        <div className="mt-2 rounded overflow-hidden aspect-video"> {/* Use aspect-video for consistent ratio */}
+      {mainImageUrl && (
+        <div className="mt-2 rounded overflow-hidden aspect-video">
           <img
-            src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
-            alt={`Thumbnail: ${data.videoTitle || data.label || 'Video'}`}
+            src={mainImageUrl}
+            alt={`썸네일: ${data.videoTitle || data.label || 'Node'}`}
             loading="lazy"
-            className="w-full h-full object-cover" // Ensure image covers the area
-            tabIndex={-1} // Not interactive in the node view itself
+            className="w-full h-full object-cover"
+            tabIndex={-1}
           />
         </div>
       )}
-      {/* You could add a short description preview here if needed */}
-      {/* {data.description && <p className="text-xs text-gray-500 mt-1 truncate">{data.description}</p>} */}
     </div>
   );
 });
 CustomNode.displayName = 'CustomNode'; // Add display name for React DevTools
 
+// --- NodeTypes 객체를 CustomNode 선언 이후에 위치 (성능 경고 완전 방지)
+const nodeTypes = { custom: CustomNode, leaf: CustomNode };
 
 // Sortable Thumbnail Item (Images)
 function SortableImageThumb({ id, src, alt, onRemove, onDownload, onShare, filename }: {
@@ -255,7 +252,6 @@ function SortableVideoThumb({ id, vidId, alt, onRemove, onOpen, onShare, filenam
   );
 }
 
-
 // Node Detail Modal Component
 const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
   node,
@@ -263,6 +259,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
   onSave,
   isEdit,
   onToggleEdit,
+  onDelete,
 }) => {
   const [formData, setFormData] = useState<NodeData>({ ...node.data });
   const [videoId, setVideoId] = useState<string | null>(null); // Derived state for main video preview
@@ -550,7 +547,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
         >
           {/* Modal Header */}
           <div className="flex justify-between items-center p-4 border-b">
-            <h2 className="text-xl font-semibold">Node {isEdit ? 'Editor' : 'Details'}</h2>
+            <h2 className="text-xl font-semibold">노드 {isEdit ? '편집' : '상세'}</h2>
             <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-2xl" aria-label="Close modal">×</button>
           </div>
 
@@ -563,7 +560,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                  <form onSubmit={handleSubmit} className="space-y-5">
                    {/* Title Input */}
                    <div>
-                     <label htmlFor="node-title" className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                     <label htmlFor="node-title" className="block text-sm font-medium text-gray-700 mb-1">제목</label>
                      <input
                        id="node-title"
                        type="text"
@@ -581,14 +578,14 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
                     >
-                      <label htmlFor="youtube-url-input" className="block text-sm font-medium text-gray-700 mb-1">Primary YouTube Video (Optional)</label>
+                      <label htmlFor="youtube-url-input" className="block text-sm font-medium text-gray-700 mb-1">대표 유튜브 영상 (선택)</label>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input
                           id="youtube-url-input"
                           type="text"
                           value={formData.videoUrl || ''}
                           onChange={handleUrlChange}
-                          placeholder="Paste YouTube URL or drag thumbnail here"
+                          placeholder="유튜브 주소를 붙여넣거나 썸네일을 드래그하세요"
                           className="flex-grow p-2 border border-gray-300 rounded shadow-sm focus:ring-blue-500 focus:border-blue-500"
                         />
                         <button
@@ -596,7 +593,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                           onClick={() => setShowYoutubeSearch(!showYoutubeSearch)} // Toggle search panel
                           className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition whitespace-nowrap"
                         >
-                           {showYoutubeSearch ? 'Hide Search' : 'Search YouTube'}
+                           {showYoutubeSearch ? '검색 닫기' : '유튜브 검색'}
                         </button>
                       </div>
                       {isDraggingOver && <div className="mt-2 text-sm text-blue-600">Drop YouTube thumbnail or link here</div>}
@@ -615,7 +612,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
 
                    {/* Description Textarea */}
                    <div>
-                     <label htmlFor="node-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                     <label htmlFor="node-description" className="block text-sm font-medium text-gray-700 mb-1">설명</label>
                      <textarea
                        id="node-description"
                        value={formData.description || ''}
@@ -628,7 +625,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
 
                     {/* Multiple Image Upload */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Additional Images</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">추가 이미지</label>
                         <input
                             type="file"
                             accept="image/*"
@@ -638,7 +635,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                             disabled={imageUploading}
                             aria-describedby="image-upload-info"
                         />
-                        <p id="image-upload-info" className="text-xs text-gray-500 mt-1">Upload multiple images (max 10MB each). Drag thumbnails to reorder.</p>
+                        <p id="image-upload-info" className="text-xs text-gray-500 mt-1">여러 이미지를 업로드할 수 있습니다(최대 10MB). 썸네일을 드래그해 순서를 변경하세요.</p>
                         {imageUploading && <div className="text-sm text-blue-600 mt-1 animate-pulse">Uploading images...</div>}
                         {uploadError && <div className="mt-1 text-sm text-red-600 whitespace-pre-wrap">{uploadError.includes('Image') && uploadError}</div>} {/* Show image specific errors */}
                         {formData.mediaImages && formData.mediaImages.length > 0 && (
@@ -665,13 +662,13 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
 
                     {/* Multiple Video URLs */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Additional Videos (YouTube)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">추가 영상 (유튜브)</label>
                       <div className="flex gap-2 mb-2">
                           <input
                               type="text"
                               value={newVideoUrl}
                               onChange={e => setNewVideoUrl(e.target.value)}
-                              placeholder="Paste YouTube URL and click Add"
+                              placeholder="유튜브 주소를 붙여넣고 추가를 누르세요"
                               className="flex-grow p-2 border border-gray-300 rounded shadow-sm focus:ring-blue-500 focus:border-blue-500"
                               aria-label="New YouTube URL to add"
                           />
@@ -681,7 +678,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition whitespace-nowrap"
                           >Add</button>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">Add multiple YouTube video links. Drag thumbnails to reorder.</p>
+                      <p className="text-xs text-gray-500 mt-1">여러 유튜브 영상을 추가할 수 있습니다. 썸네일을 드래그해 순서를 변경하세요.</p>
                       {uploadError && <div className="mt-1 text-sm text-red-600">{uploadError.includes('video') && uploadError}</div>} {/* Show video specific errors */}
                       {formData.mediaVideos && formData.mediaVideos.length > 0 && (
                           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, 'videos')}>
@@ -710,8 +707,11 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
 
                     {/* Form Actions */}
                     <div className="flex justify-end gap-3 pt-3 border-t">
-                      <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">Cancel</button>
-                      <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">Save Changes</button>
+                      {onDelete && (
+                        <button type="button" onClick={() => onDelete(node.id)} className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition">노드 삭제</button>
+                      )}
+                      <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition">취소</button>
+                      <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">저장</button>
                     </div>
                  </form>
                ) : (
@@ -795,10 +795,10 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
 
                    {/* Comments Section */}
                    <div className="border-t pt-4">
-                     <h4 className="font-semibold mb-3">Comments</h4>
+                     <h4 className="font-semibold mb-3">댓글</h4>
                      {/* Existing Comments */}
                      <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-2">
-                       {(!node.data.comments || node.data.comments.length === 0) && <p className="text-sm text-gray-500">No comments yet.</p>}
+                       {(!node.data.comments || node.data.comments.length === 0) && <p className="text-sm text-gray-500">아직 댓글이 없습니다.</p>}
                        {node.data.comments?.map(comment => (
                          <div key={comment.id} className="bg-gray-50 p-3 rounded shadow-sm text-sm">
                            <div className="flex justify-between items-center mb-1">
@@ -813,7 +813,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                      {user && ( // Only show comment form if user is logged in
                          <div className="space-y-2">
                          <textarea
-                             placeholder="Add a comment..."
+                             placeholder="댓글을 입력하세요..."
                              className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
                              rows={2}
                              value={newComment}
@@ -825,7 +825,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({
                              disabled={!newComment.trim()}
                              className="px-4 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400 transition"
                          >
-                             Post Comment
+                             댓글 등록
                          </button>
                          </div>
                      )}
@@ -887,17 +887,15 @@ NodeDetailModal.displayName = 'NodeDetailModal';
 // --- Main TreeEdit Component ---
 
 const TreeEdit = () => {
-  const { treeId } = useParams<{ treeId: string }>();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const dispatch: AppDispatch = useDispatch(); // Use AppDispatch type
-  const reactFlowWrapper = useRef<HTMLDivElement>(null); // Ref for ReactFlow container
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
   // Selectors
   const { currentTree: tree, loading: status, error } = useSelector((state: RootState) => state.trees);
   const storedNodes = tree?.nodes ?? [];
   const storedEdges = tree?.edges ?? [];
-  const user = useSelector(selectUser); // Get current user
 
   // React Flow States
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -907,36 +905,33 @@ const TreeEdit = () => {
   const [selectedNode, setSelectedNode] = useState<Node<NodeData> | null>(null);
   const [isModalEditMode, setIsModalEditMode] = useState(false);
 
-  // Node Types Memoization
-  const nodeTypes = React.useMemo(() => ({ custom: CustomNode }), []);
+  // 최초 1회만 Redux 상태로 로컬 상태 초기화
+  const [initialized, setInitialized] = useState(false);
 
   // Fetch Tree Data Effect
   useEffect(() => {
-    if (!treeId) {
+    if (!id) {
       alert("트리 ID가 없습니다. 메인 페이지로 이동합니다.");
       navigate("/home");
     } else {
-      dispatch(fetchTreeById(treeId));
+      dispatch(fetchTreeById(id));
     }
-  }, [treeId, dispatch, navigate]);
+  }, [id, dispatch, navigate]);
 
-  // Update React Flow when Redux store changes
+  // 최초 1회만 Redux 상태로 로컬 상태 초기화
   useEffect(() => {
-    if (tree && storedNodes && storedEdges) {
-       // Map stored nodes/edges to React Flow format if needed
-       // Ensure position is included
-       const flowNodes = storedNodes.map((n: Node<NodeData>) => ({
-            ...n,
-            position: n.position || { x: Math.random() * 400, y: Math.random() * 400 }, // Provide default position if missing
-            type: 'custom', // Use custom node type
-            data: { ...n.data } // Ensure data is copied properly
-        })) as Node<NodeData>[]; // Type assertion
-
-       setNodes(flowNodes);
-       setEdges(storedEdges as Edge[]); // Assuming storedEdges are already in React Flow format
+    if (!initialized && tree && storedNodes && storedEdges) {
+      const flowNodes = storedNodes.map((n: Node<NodeData>) => ({
+        ...n,
+        position: n.position || { x: Math.random() * 400, y: Math.random() * 400 },
+        type: 'custom',
+        data: { ...n.data }
+      })) as Node<NodeData>[];
+      setNodes(flowNodes);
+      setEdges(storedEdges as Edge[]);
+      setInitialized(true);
     }
-  }, [tree, storedNodes, storedEdges, setNodes, setEdges]); // Dependencies
-
+  }, [tree, storedNodes, storedEdges, setNodes, setEdges, initialized]);
 
   // Handler for connecting nodes
   const onConnect = useCallback(
@@ -949,14 +944,14 @@ const TreeEdit = () => {
   );
 
   // Handler for clicking a node (open modal in view mode)
-  const onNodeClick: NodeMouseHandler = useCallback((event, node) => {
+  const onNodeClick: NodeMouseHandler = useCallback((_, node) => {
     console.log('Node clicked:', node);
     setSelectedNode(node as Node<NodeData>); // Type assertion
     setIsModalEditMode(false); // Default to view mode on click
   }, []);
 
    // Handler for double clicking a node (open modal in edit mode)
-   const onNodeDoubleClick: NodeMouseHandler = useCallback((event, node) => {
+   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, node) => {
      console.log('Node double clicked:', node);
      setSelectedNode(node as Node<NodeData>); // Type assertion
      setIsModalEditMode(true); // Open in edit mode on double click
@@ -965,9 +960,16 @@ const TreeEdit = () => {
   // Save Node Data from Modal
   const handleSaveNodeData = useCallback(
     (nodeId: string, data: NodeData) => {
-        console.log('Saving node data:', nodeId, data);
+        console.log('Saving node data:', nodeId, data); // 모달에서 받은 data 로깅
         setNodes((nds) =>
-            nds.map((n) => (n.id === nodeId ? { ...n, data: data } : n))
+            nds.map((n) => {
+                if (n.id === nodeId) {
+                    console.log('업데이트 전 노드 data:', n.data);
+                    console.log('모달에서 받은 새 data:', data);
+                    return { ...n, data: data };
+                }
+                return n;
+            })
         );
         // Close modal after saving
         setSelectedNode(null);
@@ -978,13 +980,13 @@ const TreeEdit = () => {
          dispatch(addNotification({ _id: Date.now().toString(), message: `Node "${data.label}" updated.`, type: 'success' }));
 
     },
-    [setNodes, dispatch] // removed treeId dependency as it's not directly used here, but might be needed for dispatch
+    [setNodes, dispatch]
   );
 
 
   // Save Tree Layout and Data
   const onSaveTree = useCallback(() => {
-    if (!treeId || !reactFlowInstance) {
+    if (!id || !reactFlowInstance) {
         console.error("Cannot save: Missing treeId or React Flow instance.");
         dispatch(addNotification({ _id: Date.now().toString(), message: 'Error: Cannot save tree.', type: 'error' }));
         return;
@@ -993,25 +995,22 @@ const TreeEdit = () => {
      const currentNodes = reactFlowInstance.getNodes();
      const currentEdges = reactFlowInstance.getEdges();
 
-    console.log('Saving tree with ID:', treeId);
+    console.log('Saving tree with ID:', id);
     console.log('Nodes to save:', currentNodes);
     console.log('Edges to save:', currentEdges);
 
      // Prepare nodes data for backend (remove internal React Flow properties if necessary)
-     const nodesToSave = currentNodes.map(({ id, type, data, position, width, height }) => ({
+     const nodesToSave = currentNodes.map(({ id, type, data, position }) => ({
          id,
-         type, // Keep type if your backend uses it
+         type,
          data,
          position,
-         // Optionally include dimensions if your backend stores them
-         // width,
-         // height,
      }));
 
 
     // Dispatch action to update the entire tree structure in Redux/backend
      dispatch(updateTree({
-         treeId,
+         treeId: id,
          data: {
            nodes: nodesToSave,
            edges: currentEdges,
@@ -1025,59 +1024,138 @@ const TreeEdit = () => {
      })
      .catch((saveError) => {
          console.error("Failed to save tree:", saveError);
-         dispatch(addNotification({ _id: Date.now().toString(), message: `Failed to save tree: ${saveError.message || 'Unknown error'}`, type: 'error' }));
+         dispatch(addNotification({ _id: Date.now().toString(), message: `Failed to save tree: ${saveError.message || 'Unknown error'}` , type: 'error' }));
      });
 
-  }, [treeId, reactFlowInstance, dispatch]); // Add reactFlowInstance and dispatch
+  }, [id, reactFlowInstance, dispatch]); // Add reactFlowInstance and dispatch
 
-  // Add a new node function
-  const onAddNode = useCallback(async () => {
-    if (!treeId) {
-      console.error('Tree ID is missing!');
-      return;
-    }
+  // 실제 "노드 추가" 버튼 핸들러 (API 호출 포함)
+  const handleAddCustomNode = useCallback(async () => {
+    if (!id) return;
+    const newNodeData = {
+      label: '새 노드',
+      content: '새 노드 내용',
+      videoTitle: '',
+      videoUrl: '',
+      description: '',
+      likes: [],
+      comments: [],
+      mediaImages: [],
+      mediaVideos: []
+    };
     try {
-      // 백엔드에 노드 생성 요청
-      const response = await fetch(`/api/trees/${treeId}/nodes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          label: 'New Node',
-          videoTitle: 'New Node',
-          description: '',
-          likes: 0,
-          comments: [],
-          author: user ? { _id: user._id, name: user.name, profileImage: user.profileImage } : undefined,
-          mediaImages: [],
-          mediaVideos: []
-        })
-      });
-      if (!response.ok) {
-        throw new Error('노드 생성 실패');
+      const token = getToken();
+      if (!token) {
+        console.error('오류: 인증 토큰이 없습니다.');
+        dispatch(addNotification({ _id: Date.now().toString(), message: '로그인이 필요합니다.', type: 'error' }));
+        return;
       }
-      const newNode = await response.json();
-      setNodes((nds) => nds.concat(newNode));
-      // 필요하다면 setSelectedNode(newNode); 등으로 바로 편집 모달 열기
+      const apiResponse = await api.post(
+        `/trees/${id}/nodes`,
+        newNodeData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      console.log('[Add Node] API 응답 성공! 응답 데이터:', apiResponse.data);
+      const finalNewNode = {
+        id: apiResponse.data._id || apiResponse.data.nodeId,
+        type: 'custom',
+        position: { x: 100, y: 100 },
+        data: apiResponse.data.data || newNodeData,
+      };
+      if (!finalNewNode.id) {
+        console.error('[Add Node] 오류: 백엔드 응답에서 노드 ID를 찾을 수 없습니다!');
+        return;
+      }
+      setNodes((prevNodes) => [...prevNodes, finalNewNode]);
+      console.log('[Add Node] setNodes 호출 완료!');
     } catch (error) {
-      console.error('노드 생성 실패:', error);
+      console.error('[Add Node] 노드 생성 실패:', error);
+      dispatch(addNotification({ _id: Date.now().toString(), message: '노드 생성 실패', type: 'error' }));
     }
-  }, [treeId, setNodes, user]);
+  }, [id, setNodes, dispatch]);
 
-   // Override default nodes change handler to log changes (optional)
-   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-     // console.log("Node Changes:", changes);
-     onNodesChange(changes);
-   }, [onNodesChange]);
+  // 더블클릭으로 노드 추가 (API 연동)
+  const handlePaneDoubleClick = useCallback(async (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    console.log('handlePaneDoubleClick 함수 호출됨!', event);
+    if (!reactFlowInstance || !id) return;
+    console.log('React Flow 인스턴스:', reactFlowInstance);
+    const position = reactFlowInstance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+    console.log('계산된 노드 위치:', position);
+    const newNodeData = {
+      label: '노드추가',
+      content: '내용을 입력하세요',
+      videoTitle: '',
+      videoUrl: '',
+      description: '',
+      likes: [],
+      comments: [],
+      mediaImages: [],
+      mediaVideos: []
+    };
+    try {
+      const token = getToken();
+      if (!token) {
+        console.error('오류: 인증 토큰이 없습니다.');
+        dispatch(addNotification({ _id: Date.now().toString(), message: '로그인이 필요합니다.', type: 'error' }));
+        return;
+      }
+      const apiResponse = await api.post(
+        `/trees/${id}/nodes`,
+        newNodeData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      console.log('[Double Click] API 응답 성공! 응답 데이터:', apiResponse.data);
+      const finalNewNode = {
+        id: apiResponse.data._id || apiResponse.data.nodeId,
+        type: 'custom',
+        position,
+        data: apiResponse.data.data || newNodeData,
+      };
+      console.log('[Double Click] setNodes 호출 직전, newNode 객체:', finalNewNode);
+      if (!finalNewNode.id) {
+        console.error('[Double Click] 오류: 백엔드 응답에서 노드 ID를 찾을 수 없습니다!');
+        return;
+      }
+      setNodes((prevNodes) => [...prevNodes, finalNewNode]);
+    } catch (error) {
+      console.error('[Double Click] 노드 생성 실패:', error);
+      dispatch(addNotification({ _id: Date.now().toString(), message: '노드 생성 실패', type: 'error' }));
+    }
+  }, [reactFlowInstance, id, setNodes, dispatch]);
 
-   // Override default edges change handler to log changes (optional)
-   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
-     // console.log("Edge Changes:", changes);
-     onEdgesChange(changes);
-   }, [onEdgesChange]);
+  // Override default nodes change handler to log changes (optional)
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    // console.log("Node Changes:", changes);
+    onNodesChange(changes);
+  }, [onNodesChange]);
 
+  // Override default edges change handler to log changes (optional)
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    // console.log("Edge Changes:", changes);
+    onEdgesChange(changes);
+  }, [onEdgesChange]);
+
+  // 노드 삭제 핸들러
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+    setSelectedNode(null);
+    setIsModalEditMode(false);
+    dispatch(addNotification({ _id: Date.now().toString(), message: 'Node deleted.', type: 'info' }));
+  }, [setNodes, setEdges, dispatch]);
 
   if (status === 'pending') return <div className="p-4 text-center">Loading tree...</div>;
   if (status === 'failed') return <div className="p-4 text-center text-red-500">Error loading tree: {error}</div>;
@@ -1093,6 +1171,7 @@ const TreeEdit = () => {
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
+        onDoubleClick={handlePaneDoubleClick}
         onInit={setReactFlowInstance}
         nodeTypes={nodeTypes}
         connectionMode={ConnectionMode.Loose}
@@ -1106,25 +1185,25 @@ const TreeEdit = () => {
         <Panel position="top-right">
           <div className="flex flex-col sm:flex-row flex-wrap gap-2 p-2 bg-white rounded-lg shadow min-w-0">
             <button
-              onClick={onAddNode}
+              onClick={handleAddCustomNode}
               className="w-full sm:w-auto py-2 px-4 text-base bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-              title="Add a new node to the canvas"
+              title="노드 추가"
             >
-              Add Node
+              노드 추가
             </button>
             <button
               onClick={onSaveTree}
               className="w-full sm:w-auto py-2 px-4 text-base bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
-              title="Save the current tree layout and node data"
+              title="트리 저장"
             >
-              Save Tree
+              트리 저장
             </button>
             <button
-              onClick={() => navigate(`/trees/${treeId}`)}
+              onClick={() => navigate(`/trees/${id}`)}
               className="w-full sm:w-auto py-2 px-4 text-base bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
-              title="Exit editor and view the tree"
+              title="트리 보기"
             >
-              View Tree
+              트리 보기
             </button>
           </div>
         </Panel>
@@ -1138,6 +1217,7 @@ const TreeEdit = () => {
           onSave={handleSaveNodeData}
           isEdit={isModalEditMode}
           onToggleEdit={() => setIsModalEditMode((prev) => !prev)}
+          onDelete={handleDeleteNode}
         />
       )}
     </div>

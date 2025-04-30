@@ -1,11 +1,7 @@
 import axios from 'axios';
 
-// 개발 환경에서는 로컬 URL 사용, 프로덕션에서는 ngrok URL 사용
-const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:3001/api'
-  : window.location.hostname.includes('ngrok-free.app')
-    ? `${window.location.origin}/api`
-    : 'http://localhost:3001/api';
+// 수정된 코드: Vite 환경변수 사용
+const API_BASE_URL = import.meta.env.VITE_API_URL + '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

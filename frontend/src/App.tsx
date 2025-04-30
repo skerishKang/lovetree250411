@@ -10,6 +10,9 @@ import { getToken, clearAuthData } from '@/utils/auth';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import TreeView from '@components/TreeNodeDetail';
+import ExplorePage from './pages/ExplorePage';
+import PopularPage from './pages/PopularPage';
+import LatestPage from './pages/LatestPage';
 const TreeDetail = lazy(() => import('./pages/TreeDetail'));
 const Trees = lazy(() => import('./pages/Trees'));
 const TreeEdit = lazy(() => import('./pages/TreeEdit'));
@@ -104,6 +107,9 @@ const App: React.FC = () => {
         <Route path="/trees/:id/edit" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><TreeEdit /></Suspense></PrivateRoute>} />
         <Route path="/trees/rank" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><TreeRanking /></Suspense></PrivateRoute>} />
         <Route path="/nodes/rank" element={<PrivateRoute><Suspense fallback={<div>로딩 중...</div>}><NodeRanking /></Suspense></PrivateRoute>} />
+        <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/popular" element={<PopularPage />} />
+        <Route path="/latest" element={<LatestPage />} />
         <Route path="*" element={<Suspense fallback={<div>로딩 중...</div>}><NotFound /></Suspense>} />
       </Routes>
     </Layout>

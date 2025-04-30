@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '@/api/axios';
 
 const CreateTree = () => {
   const navigate = useNavigate();
@@ -15,20 +16,8 @@ const CreateTree = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/trees', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(treeData)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || '트리 생성에 실패했습니다.');
-      }
+      const response = await api.post('/trees', treeData);
+      const data = response.data;
 
       const treeId = data.id || data._id;
       if (!treeId) {
@@ -36,9 +25,9 @@ const CreateTree = () => {
       }
 
       navigate(`/trees/${treeId}/edit`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('트리 생성 오류:', error);
-      alert(error instanceof Error ? error.message : '트리 생성에 실패했습니다. 다시 시도해주세요.');
+      alert(error.response?.data?.message || error.message || '트리 생성에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsLoading(false);
     }

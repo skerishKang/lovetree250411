@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const Tree = require('../models/Tree');
 const mongoose = require('mongoose');
+const treeController = require('../controllers/treeController');
 
 /**
  * @route   POST /api/trees
@@ -190,6 +191,40 @@ router.put('/:id/nodes', async (req, res) => {
     res.status(500).json({ message: '서버 오류가 발생했습니다.' });
   }
 });
+
+// 트리 노드 생성
+router.post('/:id/nodes', auth, treeController.createNode);
+
+// 트리 전체 업데이트 (노드+엣지+기타 정보)
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nodes, edges, title, description, ...rest } = req.body;
+
+    const tree = await Tree.findById(id);
+    if (!tree) {
+      return res.status(404).json({ message: '트리를 찾을 수 없습니다.' });
+    }
+    if (tree.author.toString() !== req.user.id) {
+      return res.status(403).json({ message: '이 트리에 접근할 권한이 없습니다.' });
+    }
+
+    if (nodes) tree.nodes = nodes;
+    if (edges) tree.edges = edges;
+    if (title) tree.title = title;
+    if (description) tree.description = description;
+    // 필요시 기타 필드도 업데이트
+
+    await tree.save();
+    res.json(tree);
+  } catch (error) {
+    console.error('트리 전체 업데이트 실패:', error);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+});
+
+// 최신 트리 목록 조회 (인증 불필요)
+router.get('/latest', treeController.getLatestTrees);
 
 // 라우터 테스트 엔드포인트
 router.get('/test', (req, res) => {

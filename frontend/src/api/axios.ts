@@ -1,15 +1,30 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { getApiUrl } from '@/utils/apiConfig';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-// axios 인스턴스 생성
-export const api = axios.create({
-  baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// axios 인스턴스 생성 함수 (baseURL 동적 적용)
+export const createApiInstance = () => {
+  return axios.create({
+    baseURL: getApiUrl(),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+};
+
+// 기본 인스턴스 (초기화 이후 재생성 필요)
+export let api = createApiInstance();
+
+// API 인스턴스 재생성 함수
+export const updateApiInstance = () => {
+  api = createApiInstance();
+  if (isDevelopment) {
+    console.log('🔄 API 인스턴스 업데이트됨:', getApiUrl());
+  }
+  return api;
+};
 
 // 요청 인터셉터
 api.interceptors.request.use(
@@ -79,3 +94,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// 사용 예시: 환경변수 변경, 로그인/로그아웃 등에서 updateApiInstance() 호출 필요
+export { api, updateApiInstance };

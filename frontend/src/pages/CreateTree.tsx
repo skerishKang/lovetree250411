@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '@/api/axios';
+import { useDispatch } from 'react-redux';
+import { addNotification } from '@/features/notifications/notificationsSlice';
+import api from '@/utils/axios';
 
 const CreateTree = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [treeData, setTreeData] = useState({
     title: '',
     description: '',
@@ -16,18 +19,36 @@ const CreateTree = () => {
     setIsLoading(true);
 
     try {
+      console.log('[트리 생성 요청]', treeData);
       const response = await api.post('/trees', treeData);
       const data = response.data;
+      console.log('[트리 생성 응답]', data);
 
       const treeId = data.id || data._id;
       if (!treeId) {
         throw new Error('생성된 트리의 ID를 찾을 수 없습니다.');
       }
 
+      console.log('[트리 생성 성공] treeId:', treeId);
+
+      dispatch(addNotification({
+        _id: Date.now().toString(),
+        type: 'custom',
+        message: '트리가 성공적으로 생성되었습니다!',
+        read: false,
+        createdAt: new Date().toISOString(),
+      }));
+
       navigate(`/trees/${treeId}/edit`);
     } catch (error: any) {
       console.error('트리 생성 오류:', error);
-      alert(error.response?.data?.message || error.message || '트리 생성에 실패했습니다. 다시 시도해주세요.');
+      dispatch(addNotification({
+        _id: Date.now().toString(),
+        type: 'custom',
+        message: error.response?.data?.message || error.message || '트리 생성에 실패했습니다. 다시 시도해주세요.',
+        read: false,
+        createdAt: new Date().toISOString(),
+      }));
     } finally {
       setIsLoading(false);
     }

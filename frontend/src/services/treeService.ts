@@ -1,4 +1,4 @@
-import api from '@/lib/axios';
+import api from '@/utils/axios';
 import { TreeNode, TreeResponse } from '@/types/tree';
 
 interface FetchNodesParams {

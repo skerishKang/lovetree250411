@@ -1,20 +1,19 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
-import { getApiUrl } from '@/utils/apiConfig';
+import api from '@/utils/axios';
 
 // API 인스턴스 설정 함수 (동적 URL 사용)
-const createApiInstance = () => {
-  const baseURL = getApiUrl();
-  console.log('🌐 동적 API URL 설정:', baseURL);
-  
-  return axios.create({
-    baseURL,
-    withCredentials: true,
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  });
-};
+// const createApiInstance = () => {
+//   const baseURL = getApiUrl();
+//   console.log('🌐 동적 API URL 설정:', baseURL);
+//   
+//   return axios.create({
+//     baseURL,
+//     withCredentials: true,
+//     headers: {
+//       'Content-Type': 'application/json'
+//     }
+//   });
+// };
 
 // API 인스턴스 생성
 // const api = createApiInstance();
@@ -53,7 +52,6 @@ export const createTree = createAsyncThunk(
   async ({ title, description }: { title: string; description: string }, { rejectWithValue }) => {
     try {
       console.log('트리 생성 시도:', { title, description });
-      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.post('/trees', { title, description });
       console.log('트리 생성 성공:', response.data);
       return response.data;
@@ -74,7 +72,6 @@ export const fetchTrees = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('트리 목록 조회 시도');
-      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.get('/trees');
       console.log('트리 목록 조회 성공:', response.data);
       return response.data;
@@ -95,7 +92,6 @@ export const fetchTreeById = createAsyncThunk(
   async (id: string, { rejectWithValue }) => {
     try {
       console.log('트리 상세 조회 시도:', id);
-      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.get(`/trees/${id}`);
       console.log('트리 상세 조회 성공:', response.data);
       return response.data;
@@ -116,7 +112,6 @@ export const updateTreeNodes = createAsyncThunk(
   async ({ treeId, nodes, edges }: { treeId: string; nodes: any[]; edges: any[] }, { rejectWithValue }) => {
     try {
       console.log('노드 업데이트 시도:', { treeId, nodes, edges });
-      const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
       const response = await api.put(`/trees/${treeId}/nodes`, { nodes, edges });
       console.log('노드 업데이트 성공:', response.data);
       return response.data;
@@ -134,7 +129,6 @@ export const updateTreeNodes = createAsyncThunk(
 export const updateTree = createAsyncThunk(
   'trees/updateTree',
   async ({ treeId, data }: { treeId: string; data: Partial<Tree> }) => {
-    const api = createApiInstance(); // thunk 내부에서 인스턴스 생성
     const response = await api.put(`/trees/${treeId}`, data);
     return response.data;
   }

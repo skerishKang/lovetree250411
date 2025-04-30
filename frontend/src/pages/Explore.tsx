@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '@/api/axios';
+import api from '@/utils/axios';
 
 const Explore = () => {
   const [activeTab, setActiveTab] = useState<'popular' | 'latest'>('popular');

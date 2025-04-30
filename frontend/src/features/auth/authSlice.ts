@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import axios from 'axios';
+import api from '@/utils/axios';
 import { setToken, getToken, clearAuthData } from '@/utils/auth';
 import { getApiUrl } from '@/utils/apiConfig';
 
@@ -36,37 +36,10 @@ const initialState: AuthState = {
   error: null,
 };
 
-// 동적 API URL을 사용하는 axios 인스턴스 생성
-const createApiInstance = () => {
-  const baseURL = getApiUrl();
-  console.log('🌐 Auth API URL 설정:', baseURL);
-  
-  return axios.create({
-    baseURL,
-    withCredentials: true,
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  });
-};
-
-// API 인스턴스 생성
-let api = createApiInstance();
-
-// API 인스턴스 업데이트 함수 (URL이 변경되었을 때 호출)
-export const updateAuthApiInstance = () => {
-  api = createApiInstance();
-  console.log('🔄 Auth API 인스턴스 업데이트됨');
-  return api;
-};
-
 export const login = createAsyncThunk<LoginResponse, { email: string; password: string }>(
   'auth/login',
   async (credentials, { rejectWithValue, dispatch }) => {
     try {
-      // 로그인 전에 API 인스턴스 업데이트
-      updateAuthApiInstance();
-      
       console.log('🔍 login 요청 준비 중:', credentials);
       console.log('🔗 요청 URL:', `${getApiUrl()}/auth/login`);
       
@@ -157,9 +130,6 @@ export const getCurrentUser = createAsyncThunk<User>(
   'auth/getCurrentUser',
   async (_, { rejectWithValue }) => {
     try {
-      // 사용자 정보 조회 전 API 인스턴스 업데이트
-      updateAuthApiInstance();
-      
       console.log('🔍 현재 사용자 정보 요청');
       console.log('🔗 요청 URL:', `${getApiUrl()}/auth/me`);
       const response = await api.get<User>('/auth/me');

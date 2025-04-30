@@ -31,7 +31,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEn
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { getToken } from '../utils/auth';
-import { api } from '@/api/axios';
+import api from '@/utils/axios';
 
 // TODO: 이 파일의 useSelector 구조와 updateTree 페이로드 구조는
 //       slice/thunk 정의가 바뀌면 반드시 점검/수정할 것!

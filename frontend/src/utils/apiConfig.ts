@@ -9,7 +9,7 @@ interface ApiConfig {
 
 // 기본 API 설정값
 let apiConfig: ApiConfig = {
-  apiUrl: import.meta.env.VITE_API_URL,
+  apiUrl: import.meta.env.VITE_API_URL || 'https://lovetree250411.onrender.com/api',
   wsUrl: import.meta.env.VITE_WS_URL || (window.location.protocol === 'https:'
     ? 'wss://' + window.location.host
     : 'ws://' + window.location.host),
@@ -49,7 +49,7 @@ export const initApiConfig = async (): Promise<ApiConfig> => {
 
   // 환경변수 기반 기본값만 사용 (배포 환경)
   apiConfig = {
-    apiUrl: import.meta.env.VITE_API_URL,
+    apiUrl: import.meta.env.VITE_API_URL || 'https://lovetree250411.onrender.com/api',
     wsUrl: import.meta.env.VITE_WS_URL || (window.location.protocol === 'https:'
       ? 'wss://' + window.location.host
       : 'ws://' + window.location.host),

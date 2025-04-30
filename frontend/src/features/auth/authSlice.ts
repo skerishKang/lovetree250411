@@ -68,9 +68,9 @@ export const login = createAsyncThunk<LoginResponse, { email: string; password: 
       updateAuthApiInstance();
       
       console.log('🔍 login 요청 준비 중:', credentials);
-      console.log('🔗 요청 URL:', `${getApiUrl()}/api/auth/login`);
+      console.log('🔗 요청 URL:', `${getApiUrl()}/auth/login`);
       
-      const response = await api.post<LoginResponse>('/api/auth/login', credentials);
+      const response = await api.post<LoginResponse>('/auth/login', credentials);
       console.log('✅ 로그인 응답:', response.data);
       
       // 토큰 저장
@@ -136,8 +136,8 @@ export const register = createAsyncThunk<RegisterResponse, { name: string; email
   async (userData, { rejectWithValue }) => {
     try {
       console.log('🔍 register 요청 준비 중:', userData);
-      console.log('🔗 요청 URL:', '/api/auth/register');
-      const response = await api.post<RegisterResponse>('/api/auth/register', userData);
+      console.log('🔗 요청 URL:', '/auth/register');
+      const response = await api.post<RegisterResponse>('/auth/register', userData);
       console.log('✅ 회원가입 응답:', response.data);
       return response.data;
     } catch (error: any) {
@@ -161,8 +161,8 @@ export const getCurrentUser = createAsyncThunk<User>(
       updateAuthApiInstance();
       
       console.log('🔍 현재 사용자 정보 요청');
-      console.log('🔗 요청 URL:', `${getApiUrl()}/api/auth/me`);
-      const response = await api.get<User>('/api/auth/me');
+      console.log('🔗 요청 URL:', `${getApiUrl()}/auth/me`);
+      const response = await api.get<User>('/auth/me');
       console.log('✅ 사용자 정보 응답:', response.data);
       return response.data;
     } catch (error: any) {

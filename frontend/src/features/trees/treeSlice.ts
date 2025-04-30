@@ -51,12 +51,19 @@ export const createTree = createAsyncThunk(
   'trees/createTree',
   async ({ title, description }: { title: string; description: string }, { rejectWithValue }) => {
     try {
+      console.log('API Base URL:', api.defaults.baseURL);
+      console.log('트리 생성 요청 URL:', api.defaults.baseURL + '/trees');
       console.log('트리 생성 시도:', { title, description });
       const response = await api.post('/trees', { title, description });
       console.log('트리 생성 성공:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('트리 생성 실패:', error.response?.data || error.message);
+      console.error('트리 생성 실패:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config
+      });
       return rejectWithValue(
         error.response?.data?.message || 
         error.message || 
@@ -71,12 +78,19 @@ export const fetchTrees = createAsyncThunk(
   'trees/fetchTrees',
   async (_, { rejectWithValue }) => {
     try {
+      console.log('API Base URL:', api.defaults.baseURL);
+      console.log('트리 목록 요청 URL:', api.defaults.baseURL + '/trees');
       console.log('트리 목록 조회 시도');
       const response = await api.get('/trees');
       console.log('트리 목록 조회 성공:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('트리 목록 조회 실패:', error.response?.data || error.message);
+      console.error('트리 목록 조회 실패:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config
+      });
       return rejectWithValue(
         error.response?.data?.message || 
         error.message || 
@@ -91,12 +105,19 @@ export const fetchTreeById = createAsyncThunk(
   'trees/fetchTreeById',
   async (id: string, { rejectWithValue }) => {
     try {
+      console.log('API Base URL:', api.defaults.baseURL);
+      console.log('트리 상세 요청 URL:', api.defaults.baseURL + `/trees/${id}`);
       console.log('트리 상세 조회 시도:', id);
       const response = await api.get(`/trees/${id}`);
       console.log('트리 상세 조회 성공:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('트리 상세 조회 실패:', error.response?.data || error.message);
+      console.error('트리 상세 조회 실패:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config
+      });
       return rejectWithValue(
         error.response?.data?.message || 
         error.message || 
@@ -111,12 +132,19 @@ export const updateTreeNodes = createAsyncThunk(
   'trees/updateTreeNodes',
   async ({ treeId, nodes, edges }: { treeId: string; nodes: any[]; edges: any[] }, { rejectWithValue }) => {
     try {
+      console.log('API Base URL:', api.defaults.baseURL);
+      console.log('노드 업데이트 요청 URL:', api.defaults.baseURL + `/trees/${treeId}/nodes`);
       console.log('노드 업데이트 시도:', { treeId, nodes, edges });
       const response = await api.put(`/trees/${treeId}/nodes`, { nodes, edges });
       console.log('노드 업데이트 성공:', response.data);
       return response.data;
     } catch (error: any) {
-      console.error('노드 업데이트 실패:', error.response?.data || error.message);
+      console.error('노드 업데이트 실패:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config
+      });
       return rejectWithValue(
         error.response?.data?.message || 
         error.message || 
